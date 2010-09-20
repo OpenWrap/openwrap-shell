@@ -232,7 +232,7 @@ namespace OpenWrap.Console
             var client = new NotifyProgressWebClient(_notifier);
 
             var packagesToDownload = client.DownloadString(new Uri(_bootstrapAddress, UriKind.Absolute))
-                    .Split(new[] { "\\r\\n" }, StringSplitOptions.RemoveEmptyEntries)
+                    .Split(new[] { "\r\n" }, StringSplitOptions.RemoveEmptyEntries)
                     .Where(x => !x.StartsWith("#"))
                     .Select(x => new Uri(x, UriKind.Absolute));
 
