@@ -1,6 +1,6 @@
 ﻿using System;
 
-namespace TinySharpZip
+namespace OpenWrap.Console.TinySharpZip
 {
     public abstract class ZipEntry
     {

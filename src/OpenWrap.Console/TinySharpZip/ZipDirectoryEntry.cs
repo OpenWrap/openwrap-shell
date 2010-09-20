@@ -1,6 +1,4 @@
-﻿using System;
-
-namespace TinySharpZip
+﻿namespace OpenWrap.Console.TinySharpZip
 {
     public class ZipDirectoryEntry : ZipEntry
     {

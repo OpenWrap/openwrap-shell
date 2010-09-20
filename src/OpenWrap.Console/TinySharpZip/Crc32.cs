@@ -1,7 +1,6 @@
-﻿using System;
-using System.IO;
+﻿using System.IO;
 
-namespace TinySharpZip
+namespace OpenWrap.Console.TinySharpZip
 {
     internal class Crc32
     {

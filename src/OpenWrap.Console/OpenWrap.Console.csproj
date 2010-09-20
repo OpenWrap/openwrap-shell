@@ -43,9 +43,15 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="BootstrapResult.cs" />
+    <Compile Include="BootstrapRunner.cs" />
+    <Compile Include="ConsoleNotifier.cs" />
+    <Compile Include="INotifier.cs" />
+    <Compile Include="InstallAction.cs" />
     <Compile Include="Program.cs">
     </Compile>
     <Compile Include="Properties\AssemblyInfo.cs" />
+    <Compile Include="TinySharpZip\CompressionMethod.cs" />
     <Compile Include="TinySharpZip\Crc32.cs" />
     <Compile Include="TinySharpZip\ZipArchive.cs" />
     <Compile Include="TinySharpZip\ZipDirectoryEntry.cs" />

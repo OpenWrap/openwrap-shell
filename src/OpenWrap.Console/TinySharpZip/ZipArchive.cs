@@ -3,17 +3,10 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.IO.Compression;
-using System.Runtime.InteropServices;
 using System.Text;
 
-namespace TinySharpZip
+namespace OpenWrap.Console.TinySharpZip
 {
-    public enum CompressionMethod
-    {
-        Store = 0,
-        Deflate = 8
-    } ;
-
     public class ZipArchive
     {
         const string ARCHIVE_FORMAT_NOT_SUPPORTED_STRING = "Archive format is not supported.";
