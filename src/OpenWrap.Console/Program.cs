@@ -19,7 +19,7 @@ namespace OpenWrap.Console
             var rootPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "OpenWrap");
             var wrapsPath = Path.Combine(rootPath, "wraps");
             var cachePath = Path.Combine(wrapsPath, "_cache");
-            return (int)new BootstrapRunner(rootPath, wrapsPath, cachePath, new[] { "openwrap", "openfilesystem" }, "http://wraps.openwrap.org/bootstrap", new ConsoleNotifier()).Run(args);
+            return (int)new BootstrapRunner(rootPath, cachePath, wrapsPath, new[] { "openwrap", "openfilesystem" }, "http://wraps.openwrap.org/bootstrap", new ConsoleNotifier()).Run(args);
         }
     }
 }

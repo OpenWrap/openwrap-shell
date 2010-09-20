@@ -134,7 +134,7 @@ namespace OpenWrap.Console
                             let match = MatchFolderName(uncompressedFolder)
                             where match.Success
                             let version = new Version(match.Groups["version"].Value)
-                            let name = match.Groups["name"]
+                            let name = match.Groups["name"].Value
                             group new { name, uncompressedFolder, version } by name
                                 into tuplesByName
                                 select tuplesByName.OrderByDescending(x => x.version).First().uncompressedFolder.FullName
@@ -148,7 +148,7 @@ namespace OpenWrap.Console
                            let match = MatchFolderName(uncompressedFolder)
                            where match.Success
                            let version = new Version(match.Groups["version"].Value)
-                           let name = match.Groups["name"]
+                           let name = match.Groups["name"].Value
                            group new { name, folder = uncompressedFolder.FullName, version } by name
                                into tuplesByName
                                select tuplesByName.OrderByDescending(x => x.version).First().folder
