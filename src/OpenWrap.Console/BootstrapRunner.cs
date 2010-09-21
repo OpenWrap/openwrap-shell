@@ -17,12 +17,12 @@ namespace OpenWrap.Console
     {
         readonly string _bootstrapAddress;
         readonly string _cachePath;
+        readonly string _entryPointPackage;
+        readonly INotifier _notifier;
         readonly Regex _openwrapRegex;
         readonly string _rootPath;
         readonly string _wrapsPath;
         FileInfo _currentExecutable;
-        readonly INotifier _notifier;
-        string _entryPointPackage;
 
         public BootstrapRunner(string rootPath, string cachePath, string wrapsPath, IEnumerable<string> packageNamesToLoad, string bootstrapAddress, INotifier notifier)
         {
@@ -63,11 +63,14 @@ namespace OpenWrap.Console
                     throw new EntryPointNotFoundException("Could not find OpenWrap assemblies in either current project or system repository.");
 
                 var assemblyFiles = from asm in bootstrapAssemblies
-                                    let path = Path.Combine(asm, "bin-net35")
-                                    from file in Directory.GetFiles(path, "*.dll")
+                                    let pathNet40 = Path.Combine(asm, "bin-net40")
+                                    let pathNet35 = Path.Combine(asm, "bin-net35")
+                                    let net40Binaries = Directory.Exists(pathNet40) ? Directory.GetFiles(pathNet40, "*.dll") : new string[0]
+                                    let net35Binaries = Directory.Exists(pathNet35) ? Directory.GetFiles(pathNet35, "*.dll") : new string[0]
+                                    from file in net40Binaries.Concat(net35Binaries)
                                     let assembly = TryLoadAssembly(file)
                                     where assembly != null
-                                    select new { file, assembly};
+                                    select new { file, assembly };
 
                 var entryPoint = assemblyFiles.First(x => x.file.EndsWith(_entryPointPackage + ".dll", StringComparison.OrdinalIgnoreCase));
 
@@ -79,36 +82,12 @@ namespace OpenWrap.Console
 
                 _notifier.BootstraperIs(entrypointFile, entrypointVersion);
 
-                // TODO change entrypoint here
                 return ExecuteEntryPoint(args, entryPointAssembly);
             }
             catch (Exception e)
             {
                 return _notifier.RunFailed(e);
             }
-        }
-
-        BootstrapResult ExecuteEntryPoint(string[] args, Assembly entryPointAssembly)
-        {
-            var entryPointMethod = (
-                                           from exportedType in entryPointAssembly.GetExportedTypes()
-                                           where exportedType.Name.EndsWith("Runner")
-                                           let mainMethod = exportedType.GetMethod("Main", BindingFlags.Public | BindingFlags.Static, null, new[] { typeof(string[]) }, null)
-                                           where mainMethod != null
-                                           select mainMethod
-                                   )
-                                   .First();
-
-            return (BootstrapResult)entryPointMethod.Invoke(null, new object[]{args});
-        }
-
-        void AddOpenWrapSystemPathToEnvironment(string openWrapRootPath)
-        {
-            var env = Environment.GetEnvironmentVariable("PATH", EnvironmentVariableTarget.User);
-            if (env != null && env.Contains(openWrapRootPath))
-                return;
-            Environment.SetEnvironmentVariable("PATH", env + ";" + openWrapRootPath, EnvironmentVariableTarget.User);
-            _notifier.Message("Added '{0}' to PATH.", openWrapRootPath);
         }
 
         static void EnsureDirectoryExists(string wrapsPath)
@@ -120,6 +99,29 @@ namespace OpenWrap.Console
         static Assembly TryLoadAssembly(string asm)
         {
             return Assembly.LoadFrom(asm);
+        }
+
+        void AddOpenWrapSystemPathToEnvironment(string openWrapRootPath)
+        {
+            var env = Environment.GetEnvironmentVariable("PATH", EnvironmentVariableTarget.User);
+            if (env != null && env.Contains(openWrapRootPath))
+                return;
+            Environment.SetEnvironmentVariable("PATH", env + ";" + openWrapRootPath, EnvironmentVariableTarget.User);
+            _notifier.Message("Added '{0}' to PATH.", openWrapRootPath);
+        }
+
+        BootstrapResult ExecuteEntryPoint(string[] args, Assembly entryPointAssembly)
+        {
+            var entryPointMethod = (
+                                           from exportedType in entryPointAssembly.GetExportedTypes()
+                                           where exportedType.Name.EndsWith("Runner")
+                                           let mainMethod = exportedType.GetMethod("Main", BindingFlags.Public | BindingFlags.Static, null, new[] { typeof(string[]) }, null)
+                                           where mainMethod != null
+                                           select mainMethod
+                                   )
+                    .First();
+
+            return (BootstrapResult)entryPointMethod.Invoke(null, new object[] { args });
         }
 
         IEnumerable<string> GetAssemblyPathsForProjectRepository()
@@ -136,8 +138,8 @@ namespace OpenWrap.Console
                             let version = new Version(match.Groups["version"].Value)
                             let name = match.Groups["name"].Value
                             group new { name, uncompressedFolder, version } by name
-                                into tuplesByName
-                                select tuplesByName.OrderByDescending(x => x.version).First().uncompressedFolder.FullName
+                            into tuplesByName
+                            select tuplesByName.OrderByDescending(x => x.version).First().uncompressedFolder.FullName
                     ).OrderByDescending(x => x).ToList();
         }
 
@@ -150,8 +152,8 @@ namespace OpenWrap.Console
                            let version = new Version(match.Groups["version"].Value)
                            let name = match.Groups["name"].Value
                            group new { name, folder = uncompressedFolder.FullName, version } by name
-                               into tuplesByName
-                               select tuplesByName.OrderByDescending(x => x.version).First().folder
+                           into tuplesByName
+                           select tuplesByName.OrderByDescending(x => x.version).First().folder
                    ).ToList();
         }
 
@@ -183,7 +185,7 @@ namespace OpenWrap.Console
 
         void InstallFreshVersion()
         {
-            switch(_notifier.InstallOptions())
+            switch (_notifier.InstallOptions())
             {
                 case InstallAction.InstallToDefaultLocation:
                     InstallToDefaultLocation();
@@ -247,7 +249,7 @@ namespace OpenWrap.Console
 
                 packageClient.DownloadFile(packageUri, wrapFilePath);
 
-                _notifier.Message("Expanding pacakge...");
+                _notifier.Message("Expanding package...");
                 var extractFolder = Path.Combine(_cachePath, Path.GetFileNameWithoutExtension(fileName));
 
                 if (Directory.Exists(extractFolder))
@@ -300,8 +302,8 @@ namespace OpenWrap.Console
 
         public class NotifyProgressWebClient
         {
-            readonly INotifier _notifier;
             readonly ManualResetEvent _completed = new ManualResetEvent(false);
+            readonly INotifier _notifier;
             readonly WebClient _webClient = new WebClient();
             Exception _error;
             int _progress;
@@ -318,7 +320,7 @@ namespace OpenWrap.Console
             public void DownloadFile(Uri uri, string destinationFile)
             {
                 _notifier.DownloadStart(uri);
-                
+
                 _webClient.DownloadFileAsync(uri, destinationFile);
                 Wait();
             }
