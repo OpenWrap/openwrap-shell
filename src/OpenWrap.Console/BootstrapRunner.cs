@@ -62,15 +62,18 @@ namespace OpenWrap.Console
                 if (bootstrapAssemblies.Count() == 0)
                     throw new EntryPointNotFoundException("Could not find OpenWrap assemblies in either current project or system repository.");
 
-                var assemblyFiles = from asm in bootstrapAssemblies
-                                    let pathNet40 = Path.Combine(asm, "bin-net40")
-                                    let pathNet35 = Path.Combine(asm, "bin-net35")
-                                    let net40Binaries = Directory.Exists(pathNet40) ? Directory.GetFiles(pathNet40, "*.dll") : new string[0]
-                                    let net35Binaries = Directory.Exists(pathNet35) ? Directory.GetFiles(pathNet35, "*.dll") : new string[0]
-                                    from file in net40Binaries.Concat(net35Binaries)
-                                    let assembly = TryLoadAssembly(file)
-                                    where assembly != null
-                                    select new { file, assembly };
+                var assemblyFiles = (
+                                        from asm in bootstrapAssemblies
+                                        let pathNet40 = Path.Combine(asm, "bin-net40")
+                                        let pathNet35 = Path.Combine(asm, "bin-net35")
+                                        let net40Binaries = Directory.Exists(pathNet40) ? Directory.GetFiles(pathNet40, "*.dll") : new string[0]
+                                        let net35Binaries = Directory.Exists(pathNet35) ? Directory.GetFiles(pathNet35, "*.dll") : new string[0]
+                                        from file in net40Binaries.Concat(net35Binaries)
+                                        let assembly = TryLoadAssembly(file)
+                                        where assembly != null
+                                        select new { file, assembly }
+                                    )
+                                    .ToList();
 
                 var entryPoint = assemblyFiles.First(x => x.file.EndsWith(_entryPointPackage + ".dll", StringComparison.OrdinalIgnoreCase));
 
@@ -138,8 +141,8 @@ namespace OpenWrap.Console
                             let version = new Version(match.Groups["version"].Value)
                             let name = match.Groups["name"].Value
                             group new { name, uncompressedFolder, version } by name
-                            into tuplesByName
-                            select tuplesByName.OrderByDescending(x => x.version).First().uncompressedFolder.FullName
+                                into tuplesByName
+                                select tuplesByName.OrderByDescending(x => x.version).First().uncompressedFolder.FullName
                     ).OrderByDescending(x => x).ToList();
         }
 
@@ -152,8 +155,8 @@ namespace OpenWrap.Console
                            let version = new Version(match.Groups["version"].Value)
                            let name = match.Groups["name"].Value
                            group new { name, folder = uncompressedFolder.FullName, version } by name
-                           into tuplesByName
-                           select tuplesByName.OrderByDescending(x => x.version).First().folder
+                               into tuplesByName
+                               select tuplesByName.OrderByDescending(x => x.version).First().folder
                    ).ToList();
         }
 
