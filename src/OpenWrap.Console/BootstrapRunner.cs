@@ -53,6 +53,7 @@ namespace OpenWrap.Console
             }
             try
             {
+                EnsurePackagesUnzippedInProjectRepository();
                 var bootstrapAssemblies = GetAssemblyPathsForProjectRepository();
                 if (bootstrapAssemblies.Count() == 0)
                     bootstrapAssemblies = GetAssemblyPathsForSystemRepository();
@@ -127,10 +128,36 @@ namespace OpenWrap.Console
             return (BootstrapResult)entryPointMethod.Invoke(null, new object[] { args });
         }
 
+        void EnsurePackagesUnzippedInProjectRepository()
+        {
+            foreach (var extraction in from directory in GetSelfAndParents(Environment.CurrentDirectory)
+                                       where directory.Exists
+                                       let wrapDirectoryInfo = new DirectoryInfo(Path.Combine(directory.FullName, "wraps"))
+                                       where wrapDirectoryInfo.Exists
+                                       let cacheDirectory = EnsureSubFolderExists(wrapDirectoryInfo, "_cache")
+                                       from wrapFile in wrapDirectoryInfo.GetFiles("*.wrap")
+                                       let cacheFolderForWrap = new DirectoryInfo(Path.Combine(cacheDirectory.FullName, Path.GetFileNameWithoutExtension(wrapFile.Name)))
+                                       where cacheFolderForWrap.Exists == false
+                                       select new { wrapFile, cacheFolderForWrap })
+            {
+                extraction.cacheFolderForWrap.Create();
+                using (var stream = extraction.wrapFile.OpenRead())
+                    ZipArchive.Extract(stream, extraction.cacheFolderForWrap.FullName);
+            }
+
+        }
+
+        DirectoryInfo EnsureSubFolderExists(DirectoryInfo wrapDirectoryInfo, string subfolder)
+        {
+            var di = new DirectoryInfo(Path.Combine(wrapDirectoryInfo.FullName, subfolder));
+            if (!di.Exists)
+                di.Create();
+            return di;
+        }
+
         IEnumerable<string> GetAssemblyPathsForProjectRepository()
         {
-            return
-                    (
+            return  (
                             from directory in GetSelfAndParents(Environment.CurrentDirectory)
                             where directory.Exists
                             let wrapDirectory = GetCacheDirectoryFromOpenWrapSystemDirectory(directory)

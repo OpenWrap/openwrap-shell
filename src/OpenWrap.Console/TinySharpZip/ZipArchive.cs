@@ -94,10 +94,10 @@ namespace OpenWrap.Console.TinySharpZip
                 uint uncompressedSize = reader.ReadUInt32();
                 ushort fileNameLength = reader.ReadUInt16();
                 ushort extraFieldLength = reader.ReadUInt16();
-                if (extraFieldLength != 0)
-                {
-                    throw new NotSupportedException(ARCHIVE_FORMAT_NOT_SUPPORTED_STRING);
-                }
+                //if (extraFieldLength != 0)
+                //{
+                //    throw new NotSupportedException(ARCHIVE_FORMAT_NOT_SUPPORTED_STRING);
+                //}
 
                 var fileNameBytes = reader.ReadBytes(fileNameLength);
                 Encoding fileNameEncoding;
@@ -140,6 +140,7 @@ namespace OpenWrap.Console.TinySharpZip
                 }
                 entry.SetLastModifiedDateTime(lastModifiedDateTime);
                 entries.Add(entry);
+                reader.ReadBytes(extraFieldLength);
             }
         }
 
