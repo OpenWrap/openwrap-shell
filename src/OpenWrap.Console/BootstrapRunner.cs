@@ -1,37 +1,29 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
-using System.Net;
 using System.Reflection;
 using System.Text;
-using System.Text.RegularExpressions;
-using System.Threading;
-using OpenWrap.Console.TinySharpZip;
+using OpenWrap.Preloading;
 
-namespace OpenWrap.Console
+namespace OpenWrap
 {
     public class BootstrapRunner
     {
-        readonly string _bootstrapAddress;
-        readonly string _cachePath;
         readonly string _entryPointPackage;
         readonly INotifier _notifier;
-        readonly Regex _openwrapRegex;
-        readonly string _rootPath;
-        readonly string _wrapsPath;
+        readonly IEnumerable<string> _packageNamesToLoad;
+        string _systemRootPath;
+        string _bootstrapAddress;
         FileInfo _currentExecutable;
 
-        public BootstrapRunner(string rootPath, string cachePath, string wrapsPath, IEnumerable<string> packageNamesToLoad, string bootstrapAddress, INotifier notifier)
+        public BootstrapRunner(string systemRootPath, IEnumerable<string> packageNamesToLoad, string bootstrapAddress, INotifier notifier)
         {
-            _cachePath = cachePath;
-            _wrapsPath = wrapsPath;
-            _rootPath = rootPath;
+            _packageNamesToLoad = packageNamesToLoad;
+            _systemRootPath = systemRootPath;
             _notifier = notifier;
             _entryPointPackage = packageNamesToLoad.First();
-            _openwrapRegex = new Regex(string.Format(@"^(?<name>{0})-(?<version>\d+(\.\d+(\.\d+(\.\d+)?)?)?)$", string.Join("|", packageNamesToLoad.ToArray())), RegexOptions.IgnoreCase);
             _bootstrapAddress = bootstrapAddress;
         }
 
@@ -42,6 +34,10 @@ namespace OpenWrap.Console
                 Debugger.Launch();
                 args = args.Where(x => x.IndexOf("-debug", StringComparison.OrdinalIgnoreCase) == -1).ToArray();
             }
+            args = ProcessArgumentWithValue(args, "-bootstrap-href", x => _bootstrapAddress = x);
+            args = ProcessArgumentWithValue(args, "-bootstrap-sysroot", x => _systemRootPath = x);
+
+
             try
             {
                 _currentExecutable = new FileInfo(Assembly.GetEntryAssembly().Location);
@@ -53,36 +49,20 @@ namespace OpenWrap.Console
             }
             try
             {
-                EnsurePackagesUnzippedInProjectRepository();
-                var bootstrapAssemblies = GetAssemblyPathsForProjectRepository();
-                if (bootstrapAssemblies.Count() == 0)
-                    bootstrapAssemblies = GetAssemblyPathsForSystemRepository();
-                if (bootstrapAssemblies.Count() == 0)
-                    bootstrapAssemblies = TryDownloadOpenWrap();
+                var bootstrapPackages = Preloader.GetPackageFolders(Preloader.RemoteInstall.FromServer(_bootstrapAddress, _notifier), Path.Combine(_systemRootPath, "wraps"), _packageNamesToLoad.ToArray());
 
-                if (bootstrapAssemblies.Count() == 0)
+                if (bootstrapPackages.Count() == 0)
                     throw new EntryPointNotFoundException("Could not find OpenWrap assemblies in either current project or system repository.");
 
-                var assemblyFiles = (
-                                        from asm in bootstrapAssemblies
-                                        let pathNet40 = Path.Combine(asm, "bin-net40")
-                                        let pathNet35 = Path.Combine(asm, "bin-net35")
-                                        let net40Binaries = Directory.Exists(pathNet40) ? Directory.GetFiles(pathNet40, "*.dll") : new string[0]
-                                        let net35Binaries = Directory.Exists(pathNet35) ? Directory.GetFiles(pathNet35, "*.dll") : new string[0]
-                                        from file in net40Binaries.Concat(net35Binaries)
-                                        let assembly = TryLoadAssembly(file)
-                                        where assembly != null
-                                        select new { file, assembly }
-                                    )
-                                    .ToList();
+                var assemblyFiles = Preloader.LoadAssemblies(bootstrapPackages);
 
-                var entryPoint = assemblyFiles.First(x => x.file.EndsWith(_entryPointPackage + ".dll", StringComparison.OrdinalIgnoreCase));
+                var entryPoint = assemblyFiles.First(x => x.Value.EndsWith(_entryPointPackage + ".dll", StringComparison.OrdinalIgnoreCase));
 
 
-                var entryPointAssembly = entryPoint.assembly;
+                var entryPointAssembly = entryPoint.Key;
                 var entrypointVersion = entryPointAssembly.GetName().Version;
 
-                var entrypointFile = entryPoint.file;
+                var entrypointFile = entryPoint.Value;
 
                 _notifier.BootstraperIs(entrypointFile, entrypointVersion);
 
@@ -94,15 +74,18 @@ namespace OpenWrap.Console
             }
         }
 
-        static void EnsureDirectoryExists(string wrapsPath)
+        string[] ProcessArgumentWithValue(string[] args, string argumentName, Action<string> argValue)
         {
-            if (!Directory.Exists(wrapsPath))
-                Directory.CreateDirectory(wrapsPath);
-        }
-
-        static Assembly TryLoadAssembly(string asm)
-        {
-            return Assembly.LoadFrom(asm);
+            for (int i = 0; i < args.Length - 1; i++)
+            {
+                if (args[i].Equals(argumentName, StringComparison.OrdinalIgnoreCase))
+                {
+                    argValue(args[i + 1]);
+                    args = args.Take(i).Concat(args.Skip(i + 1)).ToArray();
+                    break;
+                }
+            }
+            return args;
         }
 
         void AddOpenWrapSystemPathToEnvironment(string openWrapRootPath)
@@ -128,90 +111,6 @@ namespace OpenWrap.Console
             return (BootstrapResult)entryPointMethod.Invoke(null, new object[] { args });
         }
 
-        void EnsurePackagesUnzippedInProjectRepository()
-        {
-            foreach (var extraction in from directory in GetSelfAndParents(Environment.CurrentDirectory)
-                                       where directory.Exists
-                                       let wrapDirectoryInfo = new DirectoryInfo(Path.Combine(directory.FullName, "wraps"))
-                                       where wrapDirectoryInfo.Exists
-                                       let cacheDirectory = EnsureSubFolderExists(wrapDirectoryInfo, "_cache")
-                                       from wrapFile in wrapDirectoryInfo.GetFiles("*.wrap")
-                                       let cacheFolderForWrap = new DirectoryInfo(Path.Combine(cacheDirectory.FullName, Path.GetFileNameWithoutExtension(wrapFile.Name)))
-                                       where cacheFolderForWrap.Exists == false
-                                       select new { wrapFile, cacheFolderForWrap })
-            {
-                extraction.cacheFolderForWrap.Create();
-                using (var stream = extraction.wrapFile.OpenRead())
-                    ZipArchive.Extract(stream, extraction.cacheFolderForWrap.FullName);
-            }
-
-        }
-
-        DirectoryInfo EnsureSubFolderExists(DirectoryInfo wrapDirectoryInfo, string subfolder)
-        {
-            var di = new DirectoryInfo(Path.Combine(wrapDirectoryInfo.FullName, subfolder));
-            if (!di.Exists)
-                di.Create();
-            return di;
-        }
-
-        IEnumerable<string> GetAssemblyPathsForProjectRepository()
-        {
-            return  (
-                            from directory in GetSelfAndParents(Environment.CurrentDirectory)
-                            where directory.Exists
-                            let wrapDirectory = GetCacheDirectoryFromOpenWrapSystemDirectory(directory)
-                            where wrapDirectory != null && wrapDirectory.Exists
-                            from uncompressedFolder in wrapDirectory.GetDirectories()
-                            let match = MatchFolderName(uncompressedFolder)
-                            where match.Success
-                            let version = new Version(match.Groups["version"].Value)
-                            let name = match.Groups["name"].Value
-                            group new { name, uncompressedFolder, version } by name
-                                into tuplesByName
-                                select tuplesByName.OrderByDescending(x => x.version).First().uncompressedFolder.FullName
-                    ).OrderByDescending(x => x).ToList();
-        }
-
-        IEnumerable<string> GetAssemblyPathsForSystemRepository()
-        {
-            return (
-                           from uncompressedFolder in UncompressedUserDirectories()
-                           let match = MatchFolderName(uncompressedFolder)
-                           where match.Success
-                           let version = new Version(match.Groups["version"].Value)
-                           let name = match.Groups["name"].Value
-                           group new { name, folder = uncompressedFolder.FullName, version } by name
-                               into tuplesByName
-                               select tuplesByName.OrderByDescending(x => x.version).First().folder
-                   ).ToList();
-        }
-
-        DirectoryInfo GetCacheDirectoryFromOpenWrapSystemDirectory(DirectoryInfo directory)
-        {
-            try
-            {
-                if (directory == null) return null;
-                var cacheDirectory = new DirectoryInfo(Path.Combine(Path.Combine(directory.FullName, "wraps"), "_cache"));
-                if (cacheDirectory.Exists)
-                    return cacheDirectory;
-                return null;
-            }
-            catch (IOException)
-            {
-                return null;
-            }
-        }
-
-        IEnumerable<DirectoryInfo> GetSelfAndParents(string directoryPath)
-        {
-            var directory = new DirectoryInfo(directoryPath);
-            do
-            {
-                yield return directory;
-                directory = directory.Parent;
-            } while (directory != null);
-        }
 
         void InstallFreshVersion()
         {
@@ -233,7 +132,7 @@ namespace OpenWrap.Console
                 throw new FileNotFoundException("The console executable is not on a local file system.");
 
             var linkContent = Encoding.UTF8.GetBytes(path.FullName);
-            using (var file = File.Create(Path.Combine(_rootPath, _currentExecutable.Name + ".link")))
+            using (var file = File.Create(Path.Combine(_systemRootPath, _currentExecutable.Name + ".link")))
                 file.Write(linkContent, 0, linkContent.Length);
             AddOpenWrapSystemPathToEnvironment(path.Directory.FullName);
         }
@@ -244,53 +143,12 @@ namespace OpenWrap.Console
             if (!file.Exists)
                 throw new FileNotFoundException("Couldn't find the bootstrapper executable.");
 
-            System.Console.WriteLine("Installing the shell to '{0}'.", _rootPath);
-            if (!Directory.Exists(_rootPath))
-                Directory.CreateDirectory(_rootPath);
-            file.CopyTo(Path.Combine(_rootPath, file.Name));
+            Console.WriteLine("Installing the shell to '{0}'.", _systemRootPath);
+            if (!Directory.Exists(_systemRootPath))
+                Directory.CreateDirectory(_systemRootPath);
+            file.CopyTo(Path.Combine(_systemRootPath, file.Name));
 
-            AddOpenWrapSystemPathToEnvironment(_rootPath);
-        }
-
-        Match MatchFolderName(DirectoryInfo uncompressedFolder)
-        {
-            return _openwrapRegex.Match(uncompressedFolder.Name);
-        }
-
-        IEnumerable<string> TryDownloadOpenWrap()
-        {
-            EnsureDirectoryExists(_wrapsPath);
-            _notifier.Message("OpenWrap packages not found. Attempting download.");
-            var client = new NotifyProgressWebClient(_notifier);
-
-            var packagesToDownload = client.DownloadString(new Uri(_bootstrapAddress, UriKind.Absolute))
-                    .Split(new[] { "\r\n" }, StringSplitOptions.RemoveEmptyEntries)
-                    .Where(x => !x.StartsWith("#"))
-                    .Select(x => new Uri(x, UriKind.Absolute));
-
-            foreach (var packageUri in packagesToDownload)
-            {
-                var packageClient = new NotifyProgressWebClient(_notifier);
-                var fileName = packageUri.Segments.Last();
-                string wrapFilePath = Path.Combine(_wrapsPath, fileName);
-
-                if (File.Exists(wrapFilePath))
-                    File.Delete(wrapFilePath);
-
-                packageClient.DownloadFile(packageUri, wrapFilePath);
-
-                _notifier.Message("Expanding package...");
-                var extractFolder = Path.Combine(_cachePath, Path.GetFileNameWithoutExtension(fileName));
-
-                if (Directory.Exists(extractFolder))
-                    Directory.Delete(extractFolder, true);
-
-                EnsureDirectoryExists(extractFolder);
-
-                using (var wrapFileStream = File.OpenRead(wrapFilePath))
-                    ZipArchive.Extract(wrapFileStream, extractFolder);
-            }
-            return GetAssemblyPathsForSystemRepository();
+            AddOpenWrapSystemPathToEnvironment(_systemRootPath);
         }
 
         void TryUpgrade(string consolePath)
@@ -305,18 +163,10 @@ namespace OpenWrap.Console
             }
         }
 
-        IEnumerable<DirectoryInfo> UncompressedUserDirectories()
-        {
-            var di = new DirectoryInfo(Path.Combine(_wrapsPath, "_cache"));
-            if (di.Exists)
-                return di.GetDirectories();
-            return Enumerable.Empty<DirectoryInfo>();
-        }
-
         void VerifyConsoleInstalled()
         {
-            string oPath = Path.Combine(_rootPath, _currentExecutable.Name);
-            string linkPath = Path.Combine(_rootPath, _currentExecutable.Name + ".link");
+            string oPath = Path.Combine(_systemRootPath, _currentExecutable.Name);
+            string linkPath = Path.Combine(_systemRootPath, _currentExecutable.Name + ".link");
             if (!File.Exists(oPath))
             {
                 if (!File.Exists(linkPath))
@@ -327,72 +177,6 @@ namespace OpenWrap.Console
             else
             {
                 TryUpgrade(oPath);
-            }
-        }
-
-        public class NotifyProgressWebClient
-        {
-            readonly ManualResetEvent _completed = new ManualResetEvent(false);
-            readonly INotifier _notifier;
-            readonly WebClient _webClient = new WebClient();
-            Exception _error;
-            int _progress;
-            string _stringReadResult;
-
-            public NotifyProgressWebClient(INotifier notifier)
-            {
-                _notifier = notifier;
-                _webClient.DownloadFileCompleted += DownloadFileCompleted;
-                _webClient.DownloadStringCompleted += DownloadStringCompleted;
-                _webClient.DownloadProgressChanged += DownloadProgressChanged;
-            }
-
-            public void DownloadFile(Uri uri, string destinationFile)
-            {
-                _notifier.DownloadStart(uri);
-
-                _webClient.DownloadFileAsync(uri, destinationFile);
-                Wait();
-            }
-
-            public string DownloadString(Uri uri)
-            {
-                _notifier.DownloadStart(uri);
-
-                _webClient.DownloadStringAsync(uri);
-                Wait();
-                return _stringReadResult;
-            }
-
-            void Completed(AsyncCompletedEventArgs e)
-            {
-                _notifier.DownloadEnd();
-                if (e.Error != null)
-                    _error = e.Error;
-                _completed.Set();
-            }
-
-            void Wait()
-            {
-                _completed.WaitOne();
-                if (_error != null)
-                    throw new WebException("An error occured.", _error);
-            }
-
-            void DownloadFileCompleted(object src, AsyncCompletedEventArgs e)
-            {
-                Completed(e);
-            }
-
-            void DownloadProgressChanged(object src, DownloadProgressChangedEventArgs e)
-            {
-                _notifier.DownloadProgress(e.ProgressPercentage);
-            }
-
-            void DownloadStringCompleted(object src, DownloadStringCompletedEventArgs e)
-            {
-                _stringReadResult = e.Result;
-                Completed(e);
             }
         }
     }

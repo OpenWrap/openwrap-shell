@@ -1,25 +1,16 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.ComponentModel;
-using System.Diagnostics;
 using System.IO;
-using System.Linq;
-using System.Net;
-using System.Reflection;
-using System.Text;
-using System.Text.RegularExpressions;
-using System.Threading;
 
-namespace OpenWrap.Console
+namespace OpenWrap
 {
     internal class Program
     {
         static int Main(string[] args)
         {
-            var rootPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "OpenWrap");
+            var rootPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "openwrap");
             var wrapsPath = Path.Combine(rootPath, "wraps");
             var cachePath = Path.Combine(wrapsPath, "_cache");
-            return (int)new BootstrapRunner(rootPath, cachePath, wrapsPath, new[] { "openwrap", "openfilesystem", "sharpziplib" }, "http://wraps.openwrap.org/bootstrap", new ConsoleNotifier()).Run(args);
+            return (int)new BootstrapRunner(rootPath, new[] { "openwrap", "openfilesystem", "sharpziplib" }, "http://wraps.openwrap.org/", new ConsoleNotifier()).Run(args);
         }
     }
 }

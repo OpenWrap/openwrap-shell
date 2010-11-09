@@ -1,4 +1,4 @@
-﻿namespace OpenWrap.Console
+﻿namespace OpenWrap
 {
     public enum InstallAction
     {

@@ -5,7 +5,7 @@ using System.IO;
 using System.IO.Compression;
 using System.Text;
 
-namespace OpenWrap.Console.TinySharpZip
+namespace OpenWrap.Preloading.TinySharpZip
 {
     public class ZipArchive
     {
@@ -20,18 +20,18 @@ namespace OpenWrap.Console.TinySharpZip
         const ushort UTF8_FILE_NAME_ENCODING_FLAG = 1 << 11;
         const ushort VERSION_NEEDED_TO_EXTRACT = 0x0014;
 
-        List<ZipEntry> entries;
+        readonly List<ZipEntry> _entries;
 
         public ZipArchive()
         {
-            entries = new List<ZipEntry>();
+            _entries = new List<ZipEntry>();
         }
 
-        public List<ZipEntry> Entries
+        IEnumerable<ZipEntry> Entries
         {
-            get { return entries; }
-            set { entries = value; }
+            get { return _entries; }
         }
+
         public static void Extract(Stream zipStream, string targetDirectory)
         {
             var zipArchive = new ZipArchive();
@@ -70,7 +70,22 @@ namespace OpenWrap.Console.TinySharpZip
             }
         }
 
-        public void ReadFrom(Stream zipStream)
+        static void WriteStream(Stream sourceStream, Stream targetStream)
+        {
+            sourceStream.Position = 0;
+            var buffer = new byte[STREAM_EXCHANGE_BUFFER_SIZE];
+            while (true)
+            {
+                int bytesRead = sourceStream.Read(buffer, 0, buffer.Length);
+                if (bytesRead == 0)
+                {
+                    break;
+                }
+                targetStream.Write(buffer, 0, bytesRead);
+            }
+        }
+
+        void ReadFrom(Stream zipStream)
         {
             while (zipStream.Position < zipStream.Length)
             {
@@ -100,19 +115,17 @@ namespace OpenWrap.Console.TinySharpZip
                 //}
 
                 var fileNameBytes = reader.ReadBytes(fileNameLength);
-                Encoding fileNameEncoding;
-                if ((generalPurposeBitFlag & UTF8_FILE_NAME_ENCODING_FLAG) != 0)
-                    fileNameEncoding = new UTF8Encoding();
-                else
-                    fileNameEncoding = Encoding.GetEncoding(CultureInfo.CurrentCulture.TextInfo.OEMCodePage);
+                Encoding fileNameEncoding = (generalPurposeBitFlag & UTF8_FILE_NAME_ENCODING_FLAG) != 0
+                                                    ? new UTF8Encoding()
+                                                    : Encoding.GetEncoding(CultureInfo.CurrentCulture.TextInfo.OEMCodePage);
 
-                string fileName = new string(fileNameEncoding.GetChars(fileNameBytes));
+                var fileName = new string(fileNameEncoding.GetChars(fileNameBytes));
 
                 // According to ZIP specification, ZIP archives generally 
                 // contain forward slashes so make Windows file name
                 fileName = fileName.Replace('/', Path.DirectorySeparatorChar);
 
-                ZipEntry entry = null;
+                ZipEntry entry;
                 if (uncompressedSize != 0)
                 {
                     var fileData = reader.ReadBytes((int)compressedSize);
@@ -138,24 +151,9 @@ namespace OpenWrap.Console.TinySharpZip
                 {
                     entry = new ZipFileEntry(fileName, null);
                 }
-                entry.SetLastModifiedDateTime(lastModifiedDateTime);
-                entries.Add(entry);
-                reader.ReadBytes(extraFieldLength);
-            }
-        }
 
-        static void WriteStream(Stream sourceStream, Stream targetStream)
-        {
-            sourceStream.Position = 0;
-            var buffer = new byte[STREAM_EXCHANGE_BUFFER_SIZE];
-            while (true)
-            {
-                int bytesRead = sourceStream.Read(buffer, 0, buffer.Length);
-                if (bytesRead == 0)
-                {
-                    break;
-                }
-                targetStream.Write(buffer, 0, bytesRead);
+                _entries.Add(entry);
+                reader.ReadBytes(extraFieldLength);
             }
         }
     }

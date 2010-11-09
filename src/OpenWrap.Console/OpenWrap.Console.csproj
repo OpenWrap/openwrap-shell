@@ -8,7 +8,7 @@
     <ProjectGuid>{49E96F6C-C545-4826-BC35-666C76721B9D}</ProjectGuid>
     <OutputType>Exe</OutputType>
     <AppDesignerFolder>Properties</AppDesignerFolder>
-    <RootNamespace>OpenWrap.Console</RootNamespace>
+    <RootNamespace>OpenWrap</RootNamespace>
     <AssemblyName>o</AssemblyName>
     <TargetFrameworkVersion>v3.5</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>
@@ -54,15 +54,16 @@
     <Compile Include="ConsoleNotifier.cs" />
     <Compile Include="INotifier.cs" />
     <Compile Include="InstallAction.cs" />
+    <Compile Include="Preloading\INotifyDownload.cs" />
+    <Compile Include="Preloading\NotifyProgressWebClient.cs" />
+    <Compile Include="Preloading\Preloader.cs" />
     <Compile Include="Program.cs">
     </Compile>
     <Compile Include="Properties\AssemblyInfo.cs" />
-    <Compile Include="TinySharpZip\CompressionMethod.cs" />
-    <Compile Include="TinySharpZip\Crc32.cs" />
-    <Compile Include="TinySharpZip\ZipArchive.cs" />
-    <Compile Include="TinySharpZip\ZipDirectoryEntry.cs" />
-    <Compile Include="TinySharpZip\ZipEntry.cs" />
-    <Compile Include="TinySharpZip\ZipFileEntry.cs" />
+    <Compile Include="Preloading\TinySharpZip\ZipArchive.cs" />
+    <Compile Include="Preloading\TinySharpZip\ZipDirectoryEntry.cs" />
+    <Compile Include="Preloading\TinySharpZip\ZipEntry.cs" />
+    <Compile Include="Preloading\TinySharpZip\ZipFileEntry.cs" />
   </ItemGroup>
   <Import Project="..\..\build\common.project.properties" />
   <Import Project="..\..\wraps\openwrap\build\OpenWrap.CSharp.targets" />

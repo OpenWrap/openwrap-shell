@@ -1,4 +1,4 @@
-﻿namespace OpenWrap.Console.TinySharpZip
+﻿namespace OpenWrap.Preloading.TinySharpZip
 {
     public class ZipDirectoryEntry : ZipEntry
     {
