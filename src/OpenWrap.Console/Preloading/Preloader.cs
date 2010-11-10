@@ -216,7 +216,7 @@ namespace OpenWrap.Preloading
 
         public class RemoteInstall
         {
-            RemoteInstall(bool enabled, string uri, INotifier notifier)
+            RemoteInstall(bool enabled, string uri, INotifyDownload notifier)
             {
                 Enabled = enabled;
                 ServerUri = uri;
@@ -232,7 +232,7 @@ namespace OpenWrap.Preloading
             public bool Enabled { get; set; }
             public string ServerUri { get; set; }
 
-            public static RemoteInstall FromServer(string uri, INotifier notifier)
+            public static RemoteInstall FromServer(string uri, INotifyDownload notifier)
             {
                 return new RemoteInstall(true, uri, notifier);
             }

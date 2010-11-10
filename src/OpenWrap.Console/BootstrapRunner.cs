@@ -16,15 +16,17 @@ namespace OpenWrap
         readonly IEnumerable<string> _packageNamesToLoad;
         string _systemRootPath;
         string _bootstrapAddress;
+        readonly string _executableName;
         FileInfo _currentExecutable;
 
-        public BootstrapRunner(string systemRootPath, IEnumerable<string> packageNamesToLoad, string bootstrapAddress, INotifier notifier)
+        public BootstrapRunner(string executableName, string systemRootPath, IEnumerable<string> packageNamesToLoad, string bootstrapAddress, INotifier notifier)
         {
             _packageNamesToLoad = packageNamesToLoad;
             _systemRootPath = systemRootPath;
             _notifier = notifier;
             _entryPointPackage = packageNamesToLoad.First();
             _bootstrapAddress = bootstrapAddress;
+            _executableName = executableName;
         }
 
         public BootstrapResult Run(string[] args)
@@ -146,7 +148,7 @@ namespace OpenWrap
             Console.WriteLine("Installing the shell to '{0}'.", _systemRootPath);
             if (!Directory.Exists(_systemRootPath))
                 Directory.CreateDirectory(_systemRootPath);
-            file.CopyTo(Path.Combine(_systemRootPath, file.Name));
+            file.CopyTo(Path.Combine(_systemRootPath, _executableName));
 
             AddOpenWrapSystemPathToEnvironment(_systemRootPath);
         }
@@ -165,9 +167,9 @@ namespace OpenWrap
 
         void VerifyConsoleInstalled()
         {
-            string oPath = Path.Combine(_systemRootPath, _currentExecutable.Name);
-            string linkPath = Path.Combine(_systemRootPath, _currentExecutable.Name + ".link");
-            if (!File.Exists(oPath))
+            string existingBootstrapperPath = Path.Combine(_systemRootPath, _executableName);
+            string linkPath = Path.Combine(_systemRootPath, _executableName + ".link");
+            if (!File.Exists(existingBootstrapperPath))
             {
                 if (!File.Exists(linkPath))
                     InstallFreshVersion();
@@ -176,7 +178,7 @@ namespace OpenWrap
             }
             else
             {
-                TryUpgrade(oPath);
+                TryUpgrade(existingBootstrapperPath);
             }
         }
     }
