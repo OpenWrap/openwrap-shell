@@ -9,6 +9,8 @@ _ReSharper.*
 *.csproj.user
 *.resharper.user
 *.ReSharper.user
+*.teamcity.user
+*.TeamCity.user
 *.suo
 *.cache
 *.Cache
