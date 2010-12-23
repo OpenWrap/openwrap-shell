@@ -12,12 +12,12 @@ namespace OpenWrap
     public class BootstrapRunner
     {
         readonly string _entryPointPackage;
+        readonly string _executableName;
         readonly INotifier _notifier;
         readonly IEnumerable<string> _packageNamesToLoad;
-        string _systemRootPath;
         string _bootstrapAddress;
-        readonly string _executableName;
         FileInfo _currentExecutable;
+        string _systemRootPath;
 
         public BootstrapRunner(string executableName, string systemRootPath, IEnumerable<string> packageNamesToLoad, string bootstrapAddress, INotifier notifier)
         {
@@ -51,7 +51,9 @@ namespace OpenWrap
             }
             try
             {
-                var bootstrapPackages = Preloader.GetPackageFolders(Preloader.RemoteInstall.FromServer(_bootstrapAddress, _notifier), Path.Combine(_systemRootPath, "wraps"), _packageNamesToLoad.ToArray());
+                var bootstrapPackages = Preloader.GetPackageFolders(Preloader.RemoteInstall.FromServer(_bootstrapAddress, _notifier),
+                                                                    Path.Combine(_systemRootPath, "wraps"),
+                                                                    _packageNamesToLoad.ToArray());
 
                 if (bootstrapPackages.Count() == 0)
                     throw new EntryPointNotFoundException("Could not find OpenWrap assemblies in either current project or system repository.");
@@ -76,20 +78,6 @@ namespace OpenWrap
             }
         }
 
-        string[] ProcessArgumentWithValue(string[] args, string argumentName, Action<string> argValue)
-        {
-            for (int i = 0; i < args.Length - 1; i++)
-            {
-                if (args[i].Equals(argumentName, StringComparison.OrdinalIgnoreCase))
-                {
-                    argValue(args[i + 1]);
-                    args = args.Take(i).Concat(args.Skip(i + 1)).ToArray();
-                    break;
-                }
-            }
-            return args;
-        }
-
         void AddOpenWrapSystemPathToEnvironment(string openWrapRootPath)
         {
             var env = Environment.GetEnvironmentVariable("PATH", EnvironmentVariableTarget.User);
@@ -99,7 +87,7 @@ namespace OpenWrap
             _notifier.Message("Added '{0}' to PATH.", openWrapRootPath);
         }
 
-        BootstrapResult ExecuteEntryPoint(string[] args, Assembly entryPointAssembly)
+        static BootstrapResult ExecuteEntryPoint(string[] args, Assembly entryPointAssembly)
         {
             var entryPointMethod = (
                                            from exportedType in entryPointAssembly.GetExportedTypes()
@@ -148,9 +136,43 @@ namespace OpenWrap
             Console.WriteLine("Installing the shell to '{0}'.", _systemRootPath);
             if (!Directory.Exists(_systemRootPath))
                 Directory.CreateDirectory(_systemRootPath);
-            file.CopyTo(Path.Combine(_systemRootPath, _executableName));
+
+
+            var targetExecutableName = Path.Combine(_systemRootPath, _executableName);
+            file.CopyTo(targetExecutableName);
+            CopyManifest(targetExecutableName);
 
             AddOpenWrapSystemPathToEnvironment(_systemRootPath);
+        }
+
+        static void CopyManifest(string targetExecutableName)
+        {
+            using (var stream = File.Open(targetExecutableName + ".config", FileMode.Create, FileAccess.Write))
+            {
+                var content = Encoding.UTF8.GetBytes(MANIFEST_NET_VERSION);
+                stream.Write(content, 0, content.Length);
+            }
+        }
+
+        const string MANIFEST_NET_VERSION =
+@"<?xml version =""1.0""?>
+<configuration>
+    <startup useLegacyV2RuntimeActivationPolicy=""true"">
+    <supportedRuntime version=""v4.0""/>
+    </startup>
+</configuration>";
+        string[] ProcessArgumentWithValue(string[] args, string argumentName, Action<string> argValue)
+        {
+            for (int i = 0; i < args.Length - 1; i++)
+            {
+                if (args[i].Equals(argumentName, StringComparison.OrdinalIgnoreCase))
+                {
+                    argValue(args[i + 1]);
+                    args = args.Take(i).Concat(args.Skip(i + 1)).ToArray();
+                    break;
+                }
+            }
+            return args;
         }
 
         void TryUpgrade(string consolePath)
@@ -162,6 +184,7 @@ namespace OpenWrap
             {
                 _notifier.Message("Upgrading '{0}' => '{1}'", existingVersion, currentVersion);
                 File.Copy(_currentExecutable.FullName, consolePath, true);
+                CopyManifest(consolePath);
             }
         }
 
