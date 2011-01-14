@@ -18,6 +18,12 @@ namespace OpenWrap
         string _bootstrapAddress;
         FileInfo _currentExecutable;
         string _systemRootPath;
+        string _proxyUsername;
+        string _proxyPassword;
+        string _proxy;
+        string _shellInstall;
+        bool _shellPanic;
+        bool _useSystem;
 
         public BootstrapRunner(string executableName, string systemRootPath, IEnumerable<string> packageNamesToLoad, string bootstrapAddress, INotifier notifier)
         {
@@ -36,8 +42,15 @@ namespace OpenWrap
                 Debugger.Launch();
                 args = args.Where(x => x.IndexOf("-debug", StringComparison.OrdinalIgnoreCase) == -1).ToArray();
             }
-            args = ProcessArgumentWithValue(args, "-bootstrap-href", x => _bootstrapAddress = x);
-            args = ProcessArgumentWithValue(args, "-bootstrap-sysroot", x => _systemRootPath = x);
+            args = ProcessArgumentWithValue(args, "-InstallHref", x => _bootstrapAddress = x);
+            args = ProcessArgumentWithValue(args, "-SystemRepositoryPath", x => _systemRootPath = x);
+            ProcessArgumentWithValue(args, "-ProxyUsername", x => _proxyUsername = x);
+            ProcessArgumentWithValue(args, "-ProxyPassword", x => _proxyPassword = x);
+            ProcessArgumentWithValue(args, "-ProxyHref", x => _proxy = x);
+            args = ProcessArgumentWithValue(args, "-ShellInstall", x => _shellInstall = x);
+            args = ProcessArgumentWithoutValue(args, "-ShellPanic", () => _shellPanic = true);
+            args = ProcessArgumentWithoutValue(args, "-UseSystem", () => _useSystem = true);
+
 
 
             try
@@ -51,14 +64,21 @@ namespace OpenWrap
             }
             try
             {
-                var bootstrapPackages = Preloader.GetPackageFolders(Preloader.RemoteInstall.FromServer(_bootstrapAddress, _notifier),
-                                                                    Path.Combine(_systemRootPath, "wraps"),
+                var systemWrapFiles = Path.Combine(_systemRootPath, "wraps");
+                if (_shellPanic)
+                    TryRemoveWrapFiles(_packageNamesToLoad, systemWrapFiles);
+                var bootstrapPackages = Preloader.GetPackageFolders(Preloader.RemoteInstall.FromServer(_bootstrapAddress, _notifier, _proxy, _proxyUsername, _proxyPassword),
+                                                                    _useSystem ? null : Environment.CurrentDirectory,
+                                                                    systemWrapFiles,
                                                                     _packageNamesToLoad.ToArray());
 
                 if (bootstrapPackages.Count() == 0)
                     throw new EntryPointNotFoundException("Could not find OpenWrap assemblies in either current project or system repository.");
 
                 var assemblyFiles = Preloader.LoadAssemblies(bootstrapPackages);
+
+                foreach (var loadedAssembly in assemblyFiles)
+                    Debug.WriteLine("Pre-loaded assembly " + loadedAssembly.Value);
 
                 var entryPoint = assemblyFiles.First(x => x.Value.EndsWith(_entryPointPackage + ".dll", StringComparison.OrdinalIgnoreCase));
 
@@ -78,6 +98,23 @@ namespace OpenWrap
             }
         }
 
+        void TryRemoveWrapFiles(IEnumerable<string> packageNamesToLoad, string systemWrapFiles)
+        {
+            if (Directory.Exists(systemWrapFiles) == false)
+                return;
+            foreach (var package in packageNamesToLoad)
+                foreach (var file in Directory.GetFiles(systemWrapFiles, package + "-*.wrap"))
+                    try
+                    {
+                        File.Delete(file);
+                        _notifier.Message("PANIC: deleted " + file);
+                    }
+                    catch
+                    {
+                        _notifier.Message("PANIC: Could not delete " + file);
+                    }
+        }
+
         void AddOpenWrapSystemPathToEnvironment(string openWrapRootPath)
         {
             var env = Environment.GetEnvironmentVariable("PATH", EnvironmentVariableTarget.User);
@@ -87,7 +124,7 @@ namespace OpenWrap
             _notifier.Message("Added '{0}' to PATH.", openWrapRootPath);
         }
 
-        static BootstrapResult ExecuteEntryPoint(string[] args, Assembly entryPointAssembly)
+        BootstrapResult ExecuteEntryPoint(string[] args, Assembly entryPointAssembly)
         {
             var entryPointMethod = (
                                            from exportedType in entryPointAssembly.GetExportedTypes()
@@ -97,14 +134,29 @@ namespace OpenWrap
                                            select mainMethod
                                    )
                     .First();
-
+            try
+            {
+                var systemRepositoryPathSetter = entryPointMethod.DeclaringType.GetMethod("SetSystemRepositoryPath", BindingFlags.Public | BindingFlags.Static, null, new[] { typeof(string) }, null);
+                if (systemRepositoryPathSetter != null)
+                    systemRepositoryPathSetter.Invoke(null, new object[] { _systemRootPath });
+            }
+            catch
+            {
+            }
             return (BootstrapResult)entryPointMethod.Invoke(null, new object[] { args });
         }
 
 
         void InstallFreshVersion()
         {
-            switch (_notifier.InstallOptions())
+            InstallAction? result = null;
+            if (_shellInstall != null)
+            {
+                var firstValue = Enum.GetNames(typeof(InstallAction)).FirstOrDefault(x => x.StartsWith(_shellInstall, StringComparison.OrdinalIgnoreCase));
+                result = firstValue != null ? (InstallAction)Enum.Parse(typeof(InstallAction), firstValue) : (InstallAction?)null;
+            }
+            result = result ?? _notifier.InstallOptions();
+            switch (result)
             {
                 case InstallAction.InstallToDefaultLocation:
                     InstallToDefaultLocation();
@@ -161,6 +213,20 @@ namespace OpenWrap
     <supportedRuntime version=""v4.0""/>
     </startup>
 </configuration>";
+
+        string[] ProcessArgumentWithoutValue(string[] args, string argumentName, Action argValue)
+        {
+            for (int i = 0; i < args.Length; i++)
+            {
+                if (args[i].Equals(argumentName, StringComparison.OrdinalIgnoreCase))
+                {
+                    argValue();
+                    args = args.Take(i).Concat(args.Skip(i + 1)).ToArray();
+                    break;
+                }
+            }
+            return args;
+        }
         string[] ProcessArgumentWithValue(string[] args, string argumentName, Action<string> argValue)
         {
             for (int i = 0; i < args.Length - 1; i++)
@@ -168,7 +234,7 @@ namespace OpenWrap
                 if (args[i].Equals(argumentName, StringComparison.OrdinalIgnoreCase))
                 {
                     argValue(args[i + 1]);
-                    args = args.Take(i).Concat(args.Skip(i + 1)).ToArray();
+                    args = args.Take(i).Concat(args.Skip(i + 2)).ToArray();
                     break;
                 }
             }
@@ -190,6 +256,7 @@ namespace OpenWrap
 
         void VerifyConsoleInstalled()
         {
+
             string existingBootstrapperPath = Path.Combine(_systemRootPath, _executableName);
             string linkPath = Path.Combine(_systemRootPath, _executableName + ".link");
             if (!File.Exists(existingBootstrapperPath))
