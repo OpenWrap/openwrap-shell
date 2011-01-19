@@ -210,11 +210,12 @@ namespace OpenWrap
 @"<?xml version =""1.0""?>
 <configuration>
     <startup useLegacyV2RuntimeActivationPolicy=""true"">
+    <supportedRuntime version=""v2.0""/>
     <supportedRuntime version=""v4.0""/>
     </startup>
 </configuration>";
 
-        string[] ProcessArgumentWithoutValue(string[] args, string argumentName, Action argValue)
+        static string[] ProcessArgumentWithoutValue(string[] args, string argumentName, Action argValue)
         {
             for (int i = 0; i < args.Length; i++)
             {
@@ -227,7 +228,8 @@ namespace OpenWrap
             }
             return args;
         }
-        string[] ProcessArgumentWithValue(string[] args, string argumentName, Action<string> argValue)
+
+        static string[] ProcessArgumentWithValue(string[] args, string argumentName, Action<string> argValue)
         {
             for (int i = 0; i < args.Length - 1; i++)
             {

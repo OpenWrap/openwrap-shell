@@ -102,6 +102,9 @@ namespace OpenWrap.Preloading
         {
             foreach (var dir in cacheDirectories)
             {
+                dir.Refresh();
+                if (dir.Exists == false)
+                    continue;
                 var all = (
                                   from uncompressedFolder in dir.GetDirectories()
                                   let wrapFile = dir.Parent.GetFiles(uncompressedFolder.Name + ".wrap").FirstOrDefault()
@@ -136,7 +139,10 @@ namespace OpenWrap.Preloading
 
         static IEnumerable<string> GetLatestPackagesForSystemRepository(string systemRepositoryPath, Regex regex)
         {
-            return GetLatestPackageDirectories(regex, new List<DirectoryInfo> { GetCacheDirectoryFromRepositoryDirectory(new DirectoryInfo(systemRepositoryPath)) });
+            var systemRepository = new DirectoryInfo(systemRepositoryPath);
+            var cacheDirectory = GetCacheDirectoryFromRepositoryDirectory(systemRepository);
+            
+            return GetLatestPackageDirectories(regex, new List<DirectoryInfo> { cacheDirectory });
         }
 
         static IEnumerable<DirectoryInfo> GetSelfAndParents(string directoryPath)
