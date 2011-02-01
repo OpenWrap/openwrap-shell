@@ -113,7 +113,7 @@ namespace OpenWrap.Preloading
                                   where match.Success
                                   let version = new Version(match.Groups["version"].Value)
                                   let name = match.Groups["name"].Value
-                                  group new { name, folder = uncompressedFolder, version } by name
+                                  group new { name, folder = uncompressedFolder, version } by name.ToLowerInvariant()
                                       into tuplesByName
                                       select tuplesByName.OrderByDescending(x => x.version).First().folder.FullName
                           )
@@ -180,7 +180,7 @@ namespace OpenWrap.Preloading
                                                versionAttribute != null &&
                                                packageSource != null &&
                                                packageNames.Contains(nameAttribute.Value, StringComparer.OrdinalIgnoreCase)
-                                         group new { Name = nameAttribute.Value, Version = versionAttribute.Value, Href = packageSource } by nameAttribute.Value
+                                         group new { Name = nameAttribute.Value, Version = versionAttribute.Value, Href = packageSource } by nameAttribute.Value.ToLowerInvariant()
                                              into byNameGroup
                                              select byNameGroup.OrderByDescending(x => x.Version)
                                                      .Select(x => new { x.Name, Href = new Uri(x.Href, UriKind.RelativeOrAbsolute) })
