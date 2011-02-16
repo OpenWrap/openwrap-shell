@@ -100,11 +100,8 @@ namespace OpenWrap.Preloading
 
         static IEnumerable<string> GetLatestPackageDirectories(Regex regex, IEnumerable<DirectoryInfo> cacheDirectories)
         {
-            foreach (var dir in cacheDirectories)
+            foreach (var dir in cacheDirectories.Where(x=>x.Exists))
             {
-                dir.Refresh();
-                if (dir.Exists == false)
-                    continue;
                 var all = (
                                   from uncompressedFolder in dir.GetDirectories()
                                   let wrapFile = dir.Parent.GetFiles(uncompressedFolder.Name + ".wrap").FirstOrDefault()
@@ -113,7 +110,7 @@ namespace OpenWrap.Preloading
                                   where match.Success
                                   let version = new Version(match.Groups["version"].Value)
                                   let name = match.Groups["name"].Value
-                                  group new { name, folder = uncompressedFolder, version } by name.ToLowerInvariant()
+                                  group new { name, folder = uncompressedFolder, version } by name
                                       into tuplesByName
                                       select tuplesByName.OrderByDescending(x => x.version).First().folder.FullName
                           )
@@ -139,10 +136,7 @@ namespace OpenWrap.Preloading
 
         static IEnumerable<string> GetLatestPackagesForSystemRepository(string systemRepositoryPath, Regex regex)
         {
-            var systemRepository = new DirectoryInfo(systemRepositoryPath);
-            var cacheDirectory = GetCacheDirectoryFromRepositoryDirectory(systemRepository);
-            
-            return GetLatestPackageDirectories(regex, new List<DirectoryInfo> { cacheDirectory });
+            return GetLatestPackageDirectories(regex, new List<DirectoryInfo> { GetCacheDirectoryFromRepositoryDirectory(new DirectoryInfo(systemRepositoryPath)) });
         }
 
         static IEnumerable<DirectoryInfo> GetSelfAndParents(string directoryPath)
@@ -180,7 +174,7 @@ namespace OpenWrap.Preloading
                                                versionAttribute != null &&
                                                packageSource != null &&
                                                packageNames.Contains(nameAttribute.Value, StringComparer.OrdinalIgnoreCase)
-                                         group new { Name = nameAttribute.Value, Version = versionAttribute.Value, Href = packageSource } by nameAttribute.Value.ToLowerInvariant()
+                                         group new { Name = nameAttribute.Value, Version = versionAttribute.Value, Href = packageSource } by nameAttribute.Value
                                              into byNameGroup
                                              select byNameGroup.OrderByDescending(x => x.Version)
                                                      .Select(x => new { x.Name, Href = new Uri(x.Href, UriKind.RelativeOrAbsolute) })
