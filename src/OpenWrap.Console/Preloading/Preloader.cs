@@ -15,7 +15,7 @@ namespace OpenWrap.Preloading
         public static IEnumerable<string> GetPackageFolders(RemoteInstall remote, string currentDirectory, string systemRepositoryPath, params string[] packageNamesToLoad)
         {
             var regex = new Regex(string.Format(@"^(?<name>{0})-(?<version>\d+(\.\d+(\.\d+(\.\d+)?)?)?)$", string.Join("|", packageNamesToLoad.ToArray())), RegexOptions.IgnoreCase);
-            EnsurePackagesUnzippedInProjectRepository(Environment.CurrentDirectory);
+            EnsurePackagesUnzippedInRepository(Environment.CurrentDirectory);
 
 
             var bootstrapAssemblies = currentDirectory != null ? GetLatestPackagesForProjectRepository(regex, currentDirectory) : new string[0];
@@ -44,9 +44,9 @@ namespace OpenWrap.Preloading
             return subFolders.Select(x => Path.Combine(packageFolder, x));
         }
 
-        static void EnsurePackagesUnzippedInProjectRepository(string currentDirectory)
+        static void EnsurePackagesUnzippedInRepository(string repositoryPath)
         {
-            foreach (var extraction in from directory in GetSelfAndParents(currentDirectory)
+            foreach (var extraction in from directory in GetSelfAndParents(repositoryPath)
                                        where directory.Exists
                                        let wrapDirectoryInfo = new DirectoryInfo(Path.Combine(directory.FullName, "wraps"))
                                        where wrapDirectoryInfo.Exists
@@ -136,6 +136,7 @@ namespace OpenWrap.Preloading
 
         static IEnumerable<string> GetLatestPackagesForSystemRepository(string systemRepositoryPath, Regex regex)
         {
+            EnsurePackagesUnzippedInRepository(systemRepositoryPath);
             return GetLatestPackageDirectories(regex, new List<DirectoryInfo> { GetCacheDirectoryFromRepositoryDirectory(new DirectoryInfo(systemRepositoryPath)) });
         }
 
