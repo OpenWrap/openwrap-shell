@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Reflection;
@@ -12,18 +13,35 @@ namespace OpenWrap.Preloading
 {
     public static class Preloader
     {
+        static Preloader()
+        {
+            Extractor = ZipArchive.Extract;
+        }
+        public static Action<Stream, string> Extractor { get; set; }
         public static IEnumerable<string> GetPackageFolders(RemoteInstall remote, string currentDirectory, string systemRepositoryPath, params string[] packageNamesToLoad)
         {
             var regex = new Regex(string.Format(@"^(?<name>{0})-(?<version>\d+(\.\d+(\.\d+(\.\d+)?)?)?)$", string.Join("|", packageNamesToLoad.ToArray())), RegexOptions.IgnoreCase);
             EnsurePackagesUnzippedInRepository(Environment.CurrentDirectory);
 
+            var bootstrapPackagePaths = currentDirectory != null
+                ? GetLatestPackagesForProjectRepository(packageNamesToLoad, currentDirectory) 
+                : new string[0];
+            if (bootstrapPackagePaths.Count() >= packageNamesToLoad.Length) return bootstrapPackagePaths;
 
-            var bootstrapAssemblies = currentDirectory != null ? GetLatestPackagesForProjectRepository(regex, currentDirectory) : new string[0];
-            return bootstrapAssemblies.Count() != packageNamesToLoad.Length
-                           ? ((bootstrapAssemblies = GetLatestPackagesForSystemRepository(systemRepositoryPath, regex)).Count() != packageNamesToLoad.Length && remote.Enabled
-                                      ? TryDownloadPackages(systemRepositoryPath, packageNamesToLoad, regex, remote)
-                                      : bootstrapAssemblies)
-                           : bootstrapAssemblies;
+            FileNotFoundException fileNotFound = null;
+            try
+            {
+                bootstrapPackagePaths = GetLatestPackagesForSystemRepository(systemRepositoryPath, packageNamesToLoad);
+            } 
+            catch(FileNotFoundException e)
+            {
+                fileNotFound = e;
+            }
+            if ((fileNotFound != null || bootstrapPackagePaths.Count() < packageNamesToLoad.Length) && remote.Enabled)
+                return TryDownloadPackages(systemRepositoryPath, packageNamesToLoad, remote);
+            if (bootstrapPackagePaths.Count() >= packageNamesToLoad.Length)
+                return bootstrapPackagePaths;
+            throw new ArgumentException("No package present.", fileNotFound);
         }
 
         public static IEnumerable<KeyValuePair<Assembly, string>> LoadAssemblies(IEnumerable<string> packageFolders)
@@ -60,7 +78,7 @@ namespace OpenWrap.Preloading
             {
                 extraction.cacheFolderForWrap.Create();
                 using (var stream = extraction.wrapFile.OpenRead())
-                    ZipArchive.Extract(stream, extraction.cacheFolderForWrap.FullName);
+                    Extractor(stream, extraction.cacheFolderForWrap.FullName);
             }
         }
 
@@ -97,32 +115,102 @@ namespace OpenWrap.Preloading
                 return null;
             }
         }
-
-        static IEnumerable<string> GetLatestPackageDirectories(Regex regex, IEnumerable<DirectoryInfo> cacheDirectories)
+        /// <returns>null if packages cannot be retrieved (missing or otherwise</returns>
+        static IEnumerable<string> GetLatestPackageDirectories(IEnumerable<string> packageNames, IEnumerable<DirectoryInfo> cacheDirectories)
         {
-            foreach (var dir in cacheDirectories.Where(x=>x.Exists))
+            FileNotFoundException lastFileNotFound = null;
+            foreach (var cacheDirectory in cacheDirectories.Where(x=>x.Exists))
             {
-                var all = (
-                                  from uncompressedFolder in dir.GetDirectories()
-                                  let wrapFile = dir.Parent.GetFiles(uncompressedFolder.Name + ".wrap").FirstOrDefault()
-                                  where wrapFile != null && wrapFile.Exists
-                                  let match = regex.Match(uncompressedFolder.Name)
-                                  where match.Success
-                                  let version = new Version(match.Groups["version"].Value)
-                                  let name = match.Groups["name"].Value
-                                  group new { name, folder = uncompressedFolder, version } by name
-                                      into tuplesByName
-                                      select tuplesByName.OrderByDescending(x => x.version).First().folder.FullName
-                          )
-                        .ToList();
-
-                if (all.Count > 0)
-                    return all;
+                var finalList = new Dictionary<string, string>();
+                try
+                {
+                    TryAddPackages(cacheDirectory, packageNames, finalList);
+                    return finalList.Values;
+                }
+                catch(FileNotFoundException e)
+                {
+                    lastFileNotFound = e;
+                    continue;
+                }
             }
+            if (lastFileNotFound != null)
+                throw lastFileNotFound;
             return Enumerable.Empty<string>();
         }
 
-        static IEnumerable<string> GetLatestPackagesForProjectRepository(Regex regex, string currentDirectory)
+        static void TryAddPackages(DirectoryInfo cacheDirectory, IEnumerable<string> packageNames, Dictionary<string, string> finalList)
+        {
+            var foundPackages = ReadPackages(cacheDirectory, packageNames).ToLookup(x => x.Name, StringComparer.OrdinalIgnoreCase);
+            foreach (var package in packageNames.Where(_ => finalList.ContainsKey(_) == false))
+            {
+                if (foundPackages.Contains(package) == false)
+                    throw new FileNotFoundException(string.Format("Package '{0}' not found in '{1}'.", package, cacheDirectory));
+                TryAddPackage(cacheDirectory, foundPackages[package].OrderByDescending(x => x.Version).First(), finalList);
+            }
+        }
+        
+        static void TryAddPackage(DirectoryInfo cacheDirectory, foundPackage package, Dictionary<string, string> finalList)
+        {
+            if (finalList.ContainsKey(package.Name)) return;
+
+            finalList.Add(package.Name, package.Path);
+            var dependenciesToAdd = package.Dependencies.Where(_ => finalList.ContainsKey(_) == false).ToList();
+            if (dependenciesToAdd.Count > 0)
+                TryAddPackages(cacheDirectory, dependenciesToAdd, finalList);
+        }
+
+        static IEnumerable<foundPackage> ReadPackages(DirectoryInfo cacheDirectory, IEnumerable<string> packageNames)
+        {
+            if (cacheDirectory.Exists == false)
+                throw new InvalidOperationException("Cache directory does not exist");
+            return (
+                           from package in packageNames
+                           from packageDirectory in cacheDirectory.GetDirectories(package + "-*")
+                           where packageDirectory.Exists
+                           let wrapDescriptor = packageDirectory.GetFiles("*.wrapdesc").OrderBy(x => x.Name.Length).FirstOrDefault()
+                           where wrapDescriptor != null
+                           let content = File.ReadAllText(wrapDescriptor.FullName)
+                           let nameMatch = Regex.Match(content, @"name\s*:\s*(?<name>\S+)", RegexOptions.Multiline)
+                           let versionMatch = Regex.Match(content, @"version\s*:\s*(?<version>[\d\.]+)", RegexOptions.Multiline)
+                           where nameMatch.Success &&
+                                 versionMatch.Success
+                           let version = TryGetVersion(versionMatch.Groups["version"].Value)
+                           where version != null
+                           select new foundPackage
+                           { 
+                               Name = nameMatch.Groups["name"].Value,
+                               Version = version,
+                               Descriptor = content,
+                               Path = packageDirectory.FullName,
+                               Dependencies = (from match in Regex.Matches(content, @"depends\s*:\s*(?<dependency>\S+)", RegexOptions.Multiline).OfType<Match>()
+                                               where match.Success
+                                               let value = match.Groups["dependency"].Value.Split(new[] { " " }, StringSplitOptions.RemoveEmptyEntries).FirstOrDefault()
+                                               where value != null
+                                               select value).ToList()
+                           });
+        }
+
+        static Version TryGetVersion(string value)
+        {
+            try
+            {
+                return new Version(value);
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        class foundPackage
+        {
+            public string Name;
+            public Version Version;
+            public string Descriptor;
+            public string Path;
+            public IEnumerable<string> Dependencies;
+        }
+        static IEnumerable<string> GetLatestPackagesForProjectRepository(IEnumerable<string> packageNames, string currentDirectory)
         {
             var projectRepositories = (from directory in GetSelfAndParents(currentDirectory)
                                        where directory.Exists
@@ -131,13 +219,13 @@ namespace OpenWrap.Preloading
                                        select cacheDirectory).ToList();
             return projectRepositories.Count == 0
                            ? Enumerable.Empty<string>()
-                           : GetLatestPackageDirectories(regex, projectRepositories);
+                           : GetLatestPackageDirectories(packageNames, projectRepositories);
         }
 
-        static IEnumerable<string> GetLatestPackagesForSystemRepository(string systemRepositoryPath, Regex regex)
+        static IEnumerable<string> GetLatestPackagesForSystemRepository(string systemRepositoryPath, IEnumerable<string> packageNames)
         {
             EnsurePackagesUnzippedInRepository(systemRepositoryPath);
-            return GetLatestPackageDirectories(regex, new List<DirectoryInfo> { GetCacheDirectoryFromRepositoryDirectory(new DirectoryInfo(systemRepositoryPath)) });
+            return GetLatestPackageDirectories(packageNames, new List<DirectoryInfo> { GetCacheDirectoryFromRepositoryDirectory(new DirectoryInfo(systemRepositoryPath)) });
         }
 
         static IEnumerable<DirectoryInfo> GetSelfAndParents(string directoryPath)
@@ -150,7 +238,7 @@ namespace OpenWrap.Preloading
             } while (directory != null);
         }
 
-        static IEnumerable<string> TryDownloadPackages(string systemRepositoryPath, IEnumerable<string> packageNames, Regex regex, RemoteInstall remote)
+        static IEnumerable<string> TryDownloadPackages(string systemRepositoryPath, IEnumerable<string> packageNames, RemoteInstall remote)
         {
             var systemRepositoryCacheDirectory = GetCacheDirectoryFromRepositoryDirectory(new DirectoryInfo(systemRepositoryPath));
             if (!systemRepositoryCacheDirectory.Exists)
@@ -163,6 +251,8 @@ namespace OpenWrap.Preloading
 
                 var content = remote.Client.DownloadData(indexUri);
                 document = XDocument.Load(new XmlTextReader(new MemoryStream(content)));
+
+                var packageNamesToDownload = ResolvePackageNames(document, packageNames);
                 var packagesToDownload = from packageElement in document.Descendants("wrap")
                                          let nameAttribute = packageElement.Attribute("name")
                                          let versionAttribute = packageElement.Attribute("version")
@@ -174,18 +264,15 @@ namespace OpenWrap.Preloading
                                          where nameAttribute != null &&
                                                versionAttribute != null &&
                                                packageSource != null &&
-                                               packageNames.Contains(nameAttribute.Value, StringComparer.OrdinalIgnoreCase)
+                                               packageNamesToDownload.Contains(nameAttribute.Value, StringComparer.OrdinalIgnoreCase)
                                          group new { Name = nameAttribute.Value, Version = versionAttribute.Value, Href = packageSource } by nameAttribute.Value
                                              into byNameGroup
                                              select byNameGroup.OrderByDescending(x => x.Version)
                                                      .Select(x => new { x.Name, Href = new Uri(x.Href, UriKind.RelativeOrAbsolute) })
                                                      .FirstOrDefault();
 
-                foreach (var packageName in packageNames)
+                foreach (var foundPackage in packagesToDownload)
                 {
-                    var foundPackage = packagesToDownload.FirstOrDefault(x => x.Name.Equals(packageName, StringComparison.OrdinalIgnoreCase));
-                    if (foundPackage == null)
-                        throw new FileNotFoundException(string.Format("Package '{0}' not found in repository.", packageName));
                     var fullPackageUri = foundPackage.Href;
                     if (!fullPackageUri.IsAbsoluteUri)
                         fullPackageUri = new Uri(new Uri(remote.ServerUri, UriKind.Absolute), fullPackageUri);
@@ -207,15 +294,45 @@ namespace OpenWrap.Preloading
                     Directory.CreateDirectory(extractFolder);
 
                     using (var wrapFileStream = File.OpenRead(wrapFilePath))
-                        ZipArchive.Extract(wrapFileStream, extractFolder);
+                        Extractor(wrapFileStream, extractFolder);
                 }
-                return GetLatestPackagesForSystemRepository(systemRepositoryPath, regex);
+                return GetLatestPackagesForSystemRepository(systemRepositoryPath, packageNames);
 
             }
             catch
             {
                 return new string[0];
             }
+        }
+
+        static List<string> ResolvePackageNames(XDocument document, IEnumerable<string> packageNames)
+        {
+            List<string> allPackages = new List<string>();
+            foreach (var p in packageNames) AddPackageAndDependents(document, p, allPackages);
+            return allPackages;
+        }
+        static void AddPackageAndDependents(XDocument document, string currentPackage, List<string> packageNames)
+        {
+            if (!packageNames.Contains(currentPackage)) packageNames.Add(currentPackage);
+            foreach (var dependent in GetDependents(document, currentPackage))
+            {
+                if (packageNames.Contains(dependent) == false)
+                {
+                    packageNames.Add(dependent);
+                    AddPackageAndDependents(document, dependent, packageNames);
+                }
+            }
+        }
+
+        static IEnumerable<string> GetDependents(XDocument document, string packageName)
+        {
+            return from packageElement in document.Descendants("wrap")
+                   let nameAttrib = packageElement.Attribute("name")
+                   where nameAttrib != null && nameAttrib.Value.Equals(packageName, StringComparison.OrdinalIgnoreCase)
+                   from dep in packageElement.Descendants("depends")
+                   let depName = dep.Value.Split(new[] { " " }, StringSplitOptions.RemoveEmptyEntries).FirstOrDefault()
+                   where depName != null
+                   select depName;
         }
 
         static Assembly TryLoadAssembly(string asm)

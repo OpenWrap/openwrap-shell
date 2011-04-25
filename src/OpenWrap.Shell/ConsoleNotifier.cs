@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Diagnostics;
 
 namespace OpenWrap
 {
@@ -8,7 +9,10 @@ namespace OpenWrap
 
         public void BootstraperIs(string entrypointFile, Version entrypointVersion)
         {
-            Console.WriteLine("# OpenWrap v{0} ['{1}']", entrypointVersion, entrypointFile);
+            var version = FileVersionInfo.GetVersionInfo(typeof(ConsoleNotifier).Assembly.Location);
+            Console.WriteLine("# OpenWrap Shell v{0}", version.FileVersion);
+            Console.WriteLine("# " + version.LegalCopyright);
+            Console.WriteLine("# Using {0} (v{1})", entrypointFile, entrypointVersion);
         }
 
         public BootstrapResult BootstrappingFailed(Exception exception)

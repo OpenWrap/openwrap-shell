@@ -24,6 +24,7 @@ namespace OpenWrap
         string _shellInstall;
         bool _shellPanic;
         bool _useSystem;
+        string _shellVersion;
 
         public BootstrapRunner(string executableName, string systemRootPath, IEnumerable<string> packageNamesToLoad, string bootstrapAddress, INotifier notifier)
         {
@@ -33,6 +34,7 @@ namespace OpenWrap
             _entryPointPackage = packageNamesToLoad.First();
             _bootstrapAddress = bootstrapAddress;
             _executableName = executableName;
+            _shellVersion = FileVersionInfo.GetVersionInfo(Assembly.GetExecutingAssembly().Location).FileVersion;
         }
 
         public BootstrapResult Run(string[] args)
@@ -42,14 +44,47 @@ namespace OpenWrap
                 Debugger.Launch();
                 args = args.Where(x => x.IndexOf("-debug", StringComparison.OrdinalIgnoreCase) == -1).ToArray();
             }
-            args = ProcessArgumentWithValue(args, "-InstallHref", x => _bootstrapAddress = x);
-            args = ProcessArgumentWithValue(args, "-SystemRepositoryPath", x => _systemRootPath = x);
-            ProcessArgumentWithValue(args, "-ProxyUsername", x => _proxyUsername = x);
-            ProcessArgumentWithValue(args, "-ProxyPassword", x => _proxyPassword = x);
-            ProcessArgumentWithValue(args, "-ProxyHref", x => _proxy = x);
-            args = ProcessArgumentWithValue(args, "-ShellInstall", x => _shellInstall = x);
-            args = ProcessArgumentWithoutValue(args, "-ShellPanic", () => _shellPanic = true);
-            args = ProcessArgumentWithoutValue(args, "-UseSystem", () => _useSystem = true);
+            var consumedArgs = new List<string>();
+            args = ProcessArgumentWithValue(args, "-InstallHref", x =>
+            {
+                _bootstrapAddress = x;
+                consumedArgs.Add("InstallHref");
+            });
+            args = ProcessArgumentWithValue(args, "-SystemRepositoryPath", x =>
+            {
+                _systemRootPath = x;
+                consumedArgs.Add("SystemRepositoryPath");
+            });
+            ProcessArgumentWithValue(args, "-ProxyUsername", x =>
+            {
+                _proxyUsername = x;
+                consumedArgs.Add("ProxyUsername");
+            });
+            ProcessArgumentWithValue(args, "-ProxyPassword", x =>
+            {
+                _proxyPassword = x;
+                consumedArgs.Add("ProxyPassword");
+            });
+            ProcessArgumentWithValue(args, "-ProxyHref", x =>
+            {
+                _proxy = x;
+                consumedArgs.Add("ProxyHref");
+            });
+            args = ProcessArgumentWithValue(args, "-ShellInstall", x =>
+            {
+                _shellInstall = x;
+                consumedArgs.Add("ShellInstall");
+            });
+            args = ProcessArgumentWithoutValue(args, "-ShellPanic", () =>
+            {
+                _shellPanic = true;
+                consumedArgs.Add("ShellPanic");
+            });
+            args = ProcessArgumentWithoutValue(args, "-UseSystem", () =>
+            {
+                _useSystem = true;
+                consumedArgs.Add("UseSystem");
+            });
 
 
 
@@ -80,22 +115,62 @@ namespace OpenWrap
                 foreach (var loadedAssembly in assemblyFiles)
                     Debug.WriteLine("Pre-loaded assembly " + loadedAssembly.Value);
 
-                var entryPoint = assemblyFiles.First(x => x.Value.EndsWith(_entryPointPackage + ".dll", StringComparison.OrdinalIgnoreCase));
+                var entry = FindEntrypoint(assemblyFiles.Select(_ => _.Key));
+                if (entry.Key != null)
+                {
+                    NotifyVersion(entry.Key.Assembly);
+                    return ExecuteEntrypoint(entry, assemblyFiles.Select(_ => _.Key), consumedArgs);
+                }
 
-
-                var entryPointAssembly = entryPoint.Key;
-                var entrypointVersion = entryPointAssembly.GetName().Version;
-
-                var entrypointFile = entryPoint.Value;
-
-                _notifier.BootstraperIs(entrypointFile, entrypointVersion);
-
-                return ExecuteEntryPoint(args, entryPointAssembly);
+                var entryPoint = FindLegacyEntrypoint(assemblyFiles.Select(_ => _.Key));
+                if (entryPoint.Key != null)
+                {
+                    NotifyVersion(entryPoint.Key.Assembly);
+                    return ExecuteEntrypoint(args, entryPoint);
+                }
+                return BootstrapResult.EntrypointNotFound;
             }
             catch (Exception e)
             {
                 return _notifier.RunFailed(e);
             }
+        }
+        void NotifyVersion(Assembly assembly)
+        {
+            Version fileVersion = null;
+            try
+            {
+                var version = FileVersionInfo.GetVersionInfo(assembly.Location);
+                fileVersion = new Version(version.FileVersion);
+            }
+            catch
+            {
+            }
+            _notifier.BootstraperIs(assembly.Location, fileVersion ?? assembly.GetName().Version);
+        }
+        BootstrapResult ExecuteEntrypoint(string[] args, KeyValuePair<Type, Func<string[], int>> entryPoint)
+        {
+            return (BootstrapResult)entryPoint.Value(args);
+        }
+
+        BootstrapResult ExecuteEntrypoint(KeyValuePair<Type, Func<IDictionary<string, object>, int>> entryPoint, IEnumerable<Assembly> assemblies, IEnumerable<string> consumedArgs)
+        {
+            var info = new Dictionary<string, object>
+            {
+                    { "openwrap.syspath", _systemRootPath },
+                    { "openwrap.cd", Environment.CurrentDirectory },
+                    { "openwrap.shell.commandline", GetCommandLine() },
+                    { "openwrap.shell.assemblies", assemblies.Select(x=>x.Location).ToList() },
+                    { "openwrap.shell.version", _shellVersion},
+                    { "openwrap.shell.args", consumedArgs.ToList() }
+            };
+            return (BootstrapResult)entryPoint.Value(info);
+        }
+
+        string GetCommandLine()
+        {
+            var line = Environment.CommandLine.TrimStart();
+            return line.StartsWith("\"") ? line.Substring(line.IndexOf("\"") + 1) : line.Substring(line.IndexOf(" ") + 1);
         }
 
         void TryRemoveWrapFiles(IEnumerable<string> packageNamesToLoad, string systemWrapFiles)
@@ -123,7 +198,63 @@ namespace OpenWrap
             Environment.SetEnvironmentVariable("PATH", env + ";" + openWrapRootPath, EnvironmentVariableTarget.User);
             _notifier.Message("Added '{0}' to PATH.", openWrapRootPath);
         }
+        KeyValuePair<Type, Func<IDictionary<string, object>, int>> FindEntrypoint(IEnumerable<Assembly> assemblies)
+        {
 
+            var mainMethod = (from visibleTypes in AssemblyTypes(assemblies)
+                              from type in visibleTypes
+                              where type.Name.EndsWith("Runner")
+                              let mi = type.GetMethod("Main", BindingFlags.Public | BindingFlags.Static, null, new[] { typeof(IDictionary<string, object>) }, null)
+                              where mi != null
+                              select mi).FirstOrDefault();
+
+            return mainMethod == null
+            ? default(KeyValuePair<Type, Func<IDictionary<string, object>, int>>)
+            : new KeyValuePair<Type, Func<IDictionary<string, object>, int>>(mainMethod.DeclaringType, env => (int)mainMethod.Invoke(null, new object[] { env }));
+
+        }
+        IEnumerable<IEnumerable<Type>> AssemblyTypes(IEnumerable<Assembly> assemblies)
+        {
+            foreach (var assembly in assemblies)
+            {
+                Type[] exportedTypes;
+                try
+                {
+                    exportedTypes = assembly.GetExportedTypes();
+                }
+                catch
+                {
+                    continue;
+                }
+                yield return exportedTypes;
+            }
+        }
+        KeyValuePair<Type, Func<string[], int>> FindLegacyEntrypoint(IEnumerable<Assembly> assemblies)
+        {
+            var mainMethod = (from visibleTypes in AssemblyTypes(assemblies)
+                              from type in visibleTypes
+                              where type.Name.EndsWith("Runner")
+                              let mi = type.GetMethod("Main", BindingFlags.Public | BindingFlags.Static, null, new[] { typeof(string[]) }, null)
+                              where mi != null
+                              select mi).FirstOrDefault();
+
+            if (mainMethod != null)
+            {
+                var setSysPathMethod = mainMethod.DeclaringType.GetMethod("SetSystemRepositoryPath", BindingFlags.Public | BindingFlags.Static, null, new[] { typeof(string) }, null);
+
+                Func<string[], int> value = args => (int)mainMethod.Invoke(null, new object[] { args });
+                if (setSysPathMethod != null)
+                    value = args =>
+                    {
+                        setSysPathMethod.Invoke(null, new object[] { _systemRootPath });
+                        return value(args);
+                    };
+                return new KeyValuePair<Type, Func<string[], int>>(
+                        mainMethod.DeclaringType,
+                        value);
+            }
+            return default(KeyValuePair<Type, Func<string[], int>>);
+        }
         BootstrapResult ExecuteEntryPoint(string[] args, Assembly entryPointAssembly)
         {
             var entryPointMethod = (

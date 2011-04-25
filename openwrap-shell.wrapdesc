@@ -1,0 +1,4 @@
+﻿depends: openwrap content
+name: openwrap-shell
+depends: nunit
+depends: mono.cecil
