@@ -159,7 +159,7 @@ namespace OpenWrap
 
         BootstrapResult ExecuteEntrypoint(KeyValuePair<Type, Func<IDictionary<string, object>, int>> entryPoint, IEnumerable<Assembly> assemblies, IEnumerable<string> consumedArgs)
         {
-            var info = new Dictionary<string, object>
+            var info = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase)
             {
                     { "openwrap.syspath", _systemRootPath },
                     { "openwrap.cd", Environment.CurrentDirectory },

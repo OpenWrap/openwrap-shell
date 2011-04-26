@@ -121,7 +121,7 @@ namespace OpenWrap.Preloading
             FileNotFoundException lastFileNotFound = null;
             foreach (var cacheDirectory in cacheDirectories.Where(x=>x.Exists))
             {
-                var finalList = new Dictionary<string, string>();
+                var finalList = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
                 try
                 {
                     TryAddPackages(cacheDirectory, packageNames, finalList);

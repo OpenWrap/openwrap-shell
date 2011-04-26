@@ -13,7 +13,7 @@ namespace Tests.contexts
     public class preloader : contexts.context
     {
         protected string SystemRepositoryPath;
-        Dictionary<string, package> Packages = new Dictionary<string, package>();
+        Dictionary<string, package> Packages = new Dictionary<string, package>(StringComparer.OrdinalIgnoreCase);
 
         XDocument indexFile;
         string RemotePath;
