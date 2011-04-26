@@ -167,7 +167,7 @@ namespace OpenWrap.Preloading
                            from package in packageNames
                            from packageDirectory in cacheDirectory.GetDirectories(package + "-*")
                            where packageDirectory.Exists
-                           let packageFile = cacheDirectory.GetFiles(packageDirectory.Name + ".wrap").FirstOrDefault()
+                           let packageFile = cacheDirectory.Parent.GetFiles(packageDirectory.Name + ".wrap").FirstOrDefault()
                            where packageFile != null
                            let wrapDescriptor = packageDirectory.GetFiles("*.wrapdesc").OrderBy(x => x.Name.Length).FirstOrDefault()
                            where wrapDescriptor != null

@@ -10,9 +10,10 @@ namespace OpenWrap
         public void BootstraperIs(string entrypointFile, Version entrypointVersion)
         {
             var version = FileVersionInfo.GetVersionInfo(typeof(ConsoleNotifier).Assembly.Location);
-            Console.WriteLine("# OpenWrap Shell v{0}", version.FileVersion);
+            Console.WriteLine("# OpenWrap Shell {0}", version.FileVersion);
             Console.WriteLine("# " + version.LegalCopyright);
-            Console.WriteLine("# Using {0} (v{1})", entrypointFile, entrypointVersion);
+            Console.WriteLine("# Using {0} ({1})", entrypointFile, entrypointVersion);
+            Console.WriteLine();
         }
 
         public BootstrapResult BootstrappingFailed(Exception exception)
@@ -49,7 +50,8 @@ namespace OpenWrap
 
         public BootstrapResult RunFailed(Exception e)
         {
-            Console.WriteLine("OpenWrap could not be started.");
+            Console.WriteLine("# OpenWrap Shell could not start.");
+            Console.WriteLine();
             Console.WriteLine(e.Message);
             var oldColor = Console.ForegroundColor;
             try

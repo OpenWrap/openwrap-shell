@@ -3,7 +3,10 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Linq.Expressions;
 using System.Reflection;
+using System.Runtime.Serialization;
+using System.Runtime.Serialization.Formatters.Binary;
 using System.Text;
 using OpenWrap.Preloading;
 
@@ -25,6 +28,7 @@ namespace OpenWrap
         bool _shellPanic;
         bool _useSystem;
         string _shellVersion;
+        const byte CACHE_VERSION = 1;
 
         public BootstrapRunner(string executableName, string systemRootPath, IEnumerable<string> packageNamesToLoad, string bootstrapAddress, INotifier notifier)
         {
@@ -116,10 +120,10 @@ namespace OpenWrap
                     Debug.WriteLine("Pre-loaded assembly " + loadedAssembly.Value);
 
                 var entry = FindEntrypoint(assemblyFiles.Select(_ => _.Key));
-                if (entry.Key != null)
+                if (entry != null)
                 {
-                    NotifyVersion(entry.Key.Assembly);
-                    return ExecuteEntrypoint(entry, assemblyFiles.Select(_ => _.Key), consumedArgs);
+                    NotifyVersion(entry.Value.Key.Assembly);
+                    return ExecuteEntrypoint(entry.Value, assemblyFiles.Select(_ => _.Key), consumedArgs);
                 }
 
                 var entryPoint = FindLegacyEntrypoint(assemblyFiles.Select(_ => _.Key));
@@ -170,7 +174,7 @@ namespace OpenWrap
         string GetCommandLine()
         {
             var line = Environment.CommandLine.TrimStart();
-            return line.StartsWith("\"") ? line.Substring(line.IndexOf("\"") + 1) : line.Substring(line.IndexOf(" ") + 1);
+            return line.StartsWith("\"") ? line.Substring(line.IndexOf("\"",1) + 1) : line.Substring(line.IndexOf(" ") + 1);
         }
 
         void TryRemoveWrapFiles(IEnumerable<string> packageNamesToLoad, string systemWrapFiles)
@@ -198,20 +202,76 @@ namespace OpenWrap
             Environment.SetEnvironmentVariable("PATH", env + ";" + openWrapRootPath, EnvironmentVariableTarget.User);
             _notifier.Message("Added '{0}' to PATH.", openWrapRootPath);
         }
-        KeyValuePair<Type, Func<IDictionary<string, object>, int>> FindEntrypoint(IEnumerable<Assembly> assemblies)
+
+        BinaryFormatter _delegateSerializer = new BinaryFormatter(); 
+        KeyValuePair<Type,Func<IDictionary<string, object>, int>>? LoadEntrypointCache(string assemblyLocation, Assembly assembly)
         {
+            var cachedDelegatePath = Path.Combine(Path.GetDirectoryName(assemblyLocation), "_" + Path.GetFileName(assemblyLocation) + ".entrypoint");
+            bool discard = false;
+            if (File.Exists(cachedDelegatePath))
+            {
+                using (var stream = File.OpenRead(cachedDelegatePath))
+                {
+                    byte[] header = new byte[2];
+                    if (stream.Read(header, 0, 2) != 2 || header[0] != CACHE_VERSION) 
+                        discard = true;
+                    else
+                    {
+                        if (header[1] == 0) return default(KeyValuePair<Type, Func<IDictionary<string, object>, int>>);
+                        try
+                        {
+                            var stringReader = new StreamReader(stream, Encoding.Unicode);
+                            var methodDetails = stringReader.ReadToEnd();
+                            if (!string.IsNullOrEmpty(methodDetails) && methodDetails.IndexOf("::") != -1)
+                            {
+                                var typeName = methodDetails.Substring(0, methodDetails.IndexOf("::"));
+                                var methodName = methodDetails.Substring(methodDetails.IndexOf("::") + 2);
+                                var type = assembly.GetType(typeName);
+                                var method = type.GetMethod(methodName, new[] { typeof(IDictionary<string, object>) });
+                                return new KeyValuePair<Type, Func<IDictionary<string, object>, int>>(type, env=>(int)method.Invoke(null,new object[]{env}));
+                            }
+                        }
+                        catch
+                        {
+                        }
+                    }
+                }
+            }
+            File.Delete(cachedDelegatePath);
+            return null;
+        }
+        KeyValuePair<Type,Func<IDictionary<string,object>, int>>? CreateEntrypointCache(string assemblyLocation, Assembly assembly)
+        {
+            try
+            {
+                var methodInfo = (from type in assembly.GetExportedTypes()
+                                  where type.Name.EndsWith("Runner")
+                                  let mi = type.GetMethod("Main", BindingFlags.Public | BindingFlags.Static, null, new[] { typeof(IDictionary<string, object>) }, null)
+                                  where mi != null
+                                  select new{mi, type}).FirstOrDefault();
 
-            var mainMethod = (from visibleTypes in AssemblyTypes(assemblies)
-                              from type in visibleTypes
-                              where type.Name.EndsWith("Runner")
-                              let mi = type.GetMethod("Main", BindingFlags.Public | BindingFlags.Static, null, new[] { typeof(IDictionary<string, object>) }, null)
-                              where mi != null
-                              select mi).FirstOrDefault();
-
-            return mainMethod == null
-            ? default(KeyValuePair<Type, Func<IDictionary<string, object>, int>>)
-            : new KeyValuePair<Type, Func<IDictionary<string, object>, int>>(mainMethod.DeclaringType, env => (int)mainMethod.Invoke(null, new object[] { env }));
-
+                
+                using(var file = File.Create(Path.Combine(Path.GetDirectoryName(assemblyLocation), "_" + Path.GetFileName(assemblyLocation) + ".entrypoint")))
+                {
+                    file.Write(new byte[] { CACHE_VERSION, methodInfo == null ? (byte)0 : (byte)1 }, 0, 2);
+                    if (methodInfo != null)
+                    {
+                        var contentToWrite = Encoding.Unicode.GetBytes(methodInfo.type.FullName + "::" + methodInfo.mi.Name);
+                        file.Write(contentToWrite, 0, contentToWrite.Length);
+                        return new KeyValuePair<Type, Func<IDictionary<string, object>, int>>(methodInfo.type, env => (int)methodInfo.mi.Invoke(null, new object[] { env }));
+                    }
+                }
+            }
+            catch
+            {
+            }
+            return null;
+        }
+        KeyValuePair<Type, Func<IDictionary<string, object>, int>>? FindEntrypoint(IEnumerable<Assembly> assemblies)
+        {
+            return assemblies.Select(assembly=>LoadEntrypointCache(assembly.Location, assembly) ?? CreateEntrypointCache(assembly.Location, assembly))
+                .Where(_=>_ != null && _.Value.Value != null)
+                .FirstOrDefault();
         }
         IEnumerable<IEnumerable<Type>> AssemblyTypes(IEnumerable<Assembly> assemblies)
         {
@@ -231,6 +291,7 @@ namespace OpenWrap
         }
         KeyValuePair<Type, Func<string[], int>> FindLegacyEntrypoint(IEnumerable<Assembly> assemblies)
         {
+
             var mainMethod = (from visibleTypes in AssemblyTypes(assemblies)
                               from type in visibleTypes
                               where type.Name.EndsWith("Runner")
@@ -254,27 +315,6 @@ namespace OpenWrap
                         value);
             }
             return default(KeyValuePair<Type, Func<string[], int>>);
-        }
-        BootstrapResult ExecuteEntryPoint(string[] args, Assembly entryPointAssembly)
-        {
-            var entryPointMethod = (
-                                           from exportedType in entryPointAssembly.GetExportedTypes()
-                                           where exportedType.Name.EndsWith("Runner")
-                                           let mainMethod = exportedType.GetMethod("Main", BindingFlags.Public | BindingFlags.Static, null, new[] { typeof(string[]) }, null)
-                                           where mainMethod != null
-                                           select mainMethod
-                                   )
-                    .First();
-            try
-            {
-                var systemRepositoryPathSetter = entryPointMethod.DeclaringType.GetMethod("SetSystemRepositoryPath", BindingFlags.Public | BindingFlags.Static, null, new[] { typeof(string) }, null);
-                if (systemRepositoryPathSetter != null)
-                    systemRepositoryPathSetter.Invoke(null, new object[] { _systemRootPath });
-            }
-            catch
-            {
-            }
-            return (BootstrapResult)entryPointMethod.Invoke(null, new object[] { args });
         }
 
 
