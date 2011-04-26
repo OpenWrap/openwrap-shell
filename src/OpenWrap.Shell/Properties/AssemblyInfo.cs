@@ -1,6 +1,6 @@
 ﻿using System.Reflection;
 
-[assembly: AssemblyTitle("OpenWrap shell")]
+[assembly: AssemblyTitle("OpenWrap Shell")]
 [assembly: AssemblyCompany("Caffeine IT / naughtyProd Limited")]
 [assembly: AssemblyProduct("OpenWrap package management")]
 [assembly: AssemblyCopyright("Copyright © naughtyProd Limited 2009-2011")]

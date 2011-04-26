@@ -11,8 +11,10 @@ namespace OpenWrap.Preloading
     {
         readonly Dictionary<Uri, ManualResetEvent> _locks = new Dictionary<Uri, ManualResetEvent>();
         readonly INotifyDownload _notifier;
-        readonly WebClient _webClient = new WebClient();
-        readonly IWebProxy _webProxy = HttpWebRequest.GetSystemWebProxy();
+        readonly string _proxyAddress;
+        readonly string _proxyUsername;
+        readonly string _proxyPassword;
+        readonly IWebProxy _webProxy = WebRequest.GetSystemWebProxy();
         byte[] _dataReadResult;
         Exception _error;
         string _stringReadResult;
@@ -21,51 +23,69 @@ namespace OpenWrap.Preloading
         {
 
             _notifier = notifier;
-            _webClient.DownloadFileCompleted += DownloadFileCompleted;
-            _webClient.DownloadStringCompleted += DownloadStringCompleted;
-            _webClient.DownloadDataCompleted += DownloadDataCompleted;
-            _webClient.DownloadProgressChanged += DownloadProgressChanged;
+            _proxyAddress = proxyAddress;
+            _proxyUsername = proxyUsername;
+            _proxyPassword = proxyPassword;
+        }
+
+        WebClient CreateWebClient()
+        {
+            WebClient newWebClient = new WebClient();
+            newWebClient.DownloadFileCompleted += DownloadFileCompleted;
+            newWebClient.DownloadStringCompleted += DownloadStringCompleted;
+            newWebClient.DownloadDataCompleted += DownloadDataCompleted;
+            newWebClient.DownloadProgressChanged += DownloadProgressChanged;
             
-            if (proxyAddress != null)
+            if (_proxyAddress != null)
             {
-                var proxy = new WebProxy(proxyAddress, false);
-                if (proxyUsername != null)
-                    proxy.Credentials = new NetworkCredential(proxyUsername, proxyPassword);
+                var proxy = new WebProxy(_proxyAddress, false);
+                if (_proxyUsername != null)
+                    proxy.Credentials = new NetworkCredential(_proxyUsername, _proxyPassword);
                 else
                     proxy.UseDefaultCredentials = true;
-                _webClient.Proxy = proxy;
+                newWebClient.Proxy = proxy;
             }
             else
-                _webClient.Proxy = _webProxy;
-            
+                newWebClient.Proxy = _webProxy;
+            return newWebClient;
         }
 
         public byte[] DownloadData(Uri uri)
         {
-            StartAsync(uri);
-            _notifier.DownloadStart(uri);
-            _webClient.DownloadDataAsync(uri, uri);
-            Wait(uri);
-            return _dataReadResult;
+            using (var client = CreateWebClient())
+            {
+                StartAsync(uri);
+                _notifier.DownloadStart(uri);
+                client.DownloadDataAsync(uri, uri);
+                Wait(uri);
+                return _dataReadResult;
+            }
         }
 
         public void DownloadFile(Uri uri, string destinationFile)
         {
-            StartAsync(uri);
-            _notifier.DownloadStart(uri);
+            using (var client = CreateWebClient())
+            {
+                StartAsync(uri);
+                _notifier.DownloadStart(uri);
 
-            _webClient.DownloadFileAsync(uri, destinationFile, uri);
-            Wait(uri);
+                client.DownloadFileAsync(uri, destinationFile, uri);
+                Wait(uri);
+            }
         }
 
         public string DownloadString(Uri uri)
         {
-            StartAsync(uri);
-            _notifier.DownloadStart(uri);
 
-            _webClient.DownloadStringAsync(uri, uri);
-            Wait(uri);
-            return _stringReadResult;
+            using (var client = CreateWebClient())
+            {
+                StartAsync(uri);
+                _notifier.DownloadStart(uri);
+
+                client.DownloadStringAsync(uri, uri);
+                Wait(uri);
+                return _stringReadResult;
+            }
         }
 
         void Completed(AsyncCompletedEventArgs e)
