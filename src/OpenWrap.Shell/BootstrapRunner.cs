@@ -43,12 +43,13 @@ namespace OpenWrap
 
         public BootstrapResult Run(string[] args)
         {
+            var consumedArgs = new List<string>();
             if (args.Contains("-debug", StringComparer.OrdinalIgnoreCase))
             {
                 Debugger.Launch();
+                5consumedArgs.Add("debug");
                 args = args.Where(x => x.IndexOf("-debug", StringComparison.OrdinalIgnoreCase) == -1).ToArray();
             }
-            var consumedArgs = new List<string>();
             args = ProcessArgumentWithValue(args, "-InstallHref", x =>
             {
                 _bootstrapAddress = x;
@@ -345,6 +346,8 @@ namespace OpenWrap
                 throw new FileNotFoundException("The console executable is not on a local file system.");
 
             var linkContent = Encoding.UTF8.GetBytes(path.FullName);
+            if (Directory.Exists(_systemRootPath) == false)
+                Directory.CreateDirectory(_systemRootPath);
             using (var file = File.Create(Path.Combine(_systemRootPath, _currentExecutable.Name + ".link")))
                 file.Write(linkContent, 0, linkContent.Length);
             AddOpenWrapSystemPathToEnvironment(path.Directory.FullName);
@@ -381,7 +384,7 @@ namespace OpenWrap
 @"<?xml version =""1.0""?>
 <configuration>
     <startup useLegacyV2RuntimeActivationPolicy=""true"">
-    <supportedRuntime version=""v2.0""/>
+    <supportedRuntime version=""v2.0.50727""/>
     <supportedRuntime version=""v4.0""/>
     </startup>
 </configuration>";
