@@ -259,6 +259,7 @@ namespace OpenWrap.Preloading
                 var packagesToDownload = from packageElement in document.Descendants("wrap")
                                          let nameAttribute = packageElement.Attribute("name")
                                          let versionAttribute = packageElement.Attribute("version")
+                                         let nukedAttribute = packageElement.Attribute("nuked")
                                          let packageSource = (from link in packageElement.Descendants("link")
                                                               let rel = link.Attribute("rel")
                                                               let href = link.Attribute("href")
@@ -267,6 +268,7 @@ namespace OpenWrap.Preloading
                                          where nameAttribute != null &&
                                                versionAttribute != null &&
                                                packageSource != null &&
+                                               (nukedAttribute == null || !nukedAttribute.Value.Equals("true", StringComparison.OrdinalIgnoreCase)) &&
                                                packageNamesToDownload.Contains(nameAttribute.Value, StringComparer.OrdinalIgnoreCase)
                                          group new { Name = nameAttribute.Value, Version = versionAttribute.Value, Href = packageSource } by nameAttribute.Value.ToLowerInvariant()
                                              into byNameGroup
