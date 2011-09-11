@@ -43,12 +43,16 @@ namespace OpenWrap
 
         public BootstrapResult Run(string[] args)
         {
+            var consumedArgs = new List<string>();
             if (args.Contains("-debug", StringComparer.OrdinalIgnoreCase))
             {
-                Debugger.Launch();
+                // mono doesn't support attaching a debugger
+                if (Type.GetType("Mono.Runtime") == null && !Debugger.IsAttached)
+                    Debugger.Launch();
+                consumedArgs.Add("debug");
+                _debug = true;
                 args = args.Where(x => x.IndexOf("-debug", StringComparison.OrdinalIgnoreCase) == -1).ToArray();
             }
-            var consumedArgs = new List<string>();
             args = ProcessArgumentWithValue(args, "-InstallHref", x =>
             {
                 _bootstrapAddress = x;
@@ -113,11 +117,10 @@ namespace OpenWrap
 
                 if (bootstrapPackages.Count() == 0)
                     throw new EntryPointNotFoundException("Could not find OpenWrap assemblies in either current project or system repository.");
-
+                LogFoundPackages(bootstrapPackages);
                 var assemblyFiles = Preloader.LoadAssemblies(bootstrapPackages);
 
-                foreach (var loadedAssembly in assemblyFiles)
-                    Debug.WriteLine("Pre-loaded assembly " + loadedAssembly.Value);
+                LogLoadedAssemblies(assemblyFiles);
 
                 var entry = FindEntrypoint(assemblyFiles.Select(_ => _.Key));
                 if (entry != null)
@@ -139,6 +142,21 @@ namespace OpenWrap
                 return _notifier.RunFailed(e);
             }
         }
+
+        void LogLoadedAssemblies(IEnumerable<KeyValuePair<Assembly, string>> assemblyFiles)
+        {
+            if (!_debug) return;
+
+            foreach (var loadedAssembly in assemblyFiles)
+                Console.WriteLine("Pre-loaded assembly " + loadedAssembly.Value);
+        }
+
+        void LogFoundPackages(IEnumerable<string> bootstrapPackages)
+        {
+            if (!_debug) return;
+            foreach (var pack in bootstrapPackages) Console.WriteLine("Detected package " + pack);
+        }
+
         void NotifyVersion(Assembly assembly)
         {
             Version fileVersion = null;
@@ -174,7 +192,12 @@ namespace OpenWrap
         string GetCommandLine()
         {
             var line = Environment.CommandLine.TrimStart();
-            return line.StartsWith("\"") ? line.Substring(line.IndexOf("\"",1) + 1) : line.Substring(line.IndexOf(" ") + 1);
+            var exePosition = line.IndexOf(_executableName, StringComparison.OrdinalIgnoreCase);
+            if (exePosition == -1)
+                return line.StartsWith("\"") ? line.Substring(line.IndexOf("\"",1) + 1) : line.Substring(line.IndexOf(" ") + 1);
+
+            var processed = line.Substring(exePosition + _executableName.Length).TrimStart();
+            return processed.StartsWith("\"") ? processed.Substring(1).TrimStart() : processed.TrimStart();
         }
 
         void TryRemoveWrapFiles(IEnumerable<string> packageNamesToLoad, string systemWrapFiles)
@@ -203,7 +226,9 @@ namespace OpenWrap
             _notifier.Message("Added '{0}' to PATH.", openWrapRootPath);
         }
 
-        BinaryFormatter _delegateSerializer = new BinaryFormatter(); 
+        BinaryFormatter _delegateSerializer = new BinaryFormatter();
+        bool _debug;
+
         KeyValuePair<Type,Func<IDictionary<string, object>, int>>? LoadEntrypointCache(string assemblyLocation, Assembly assembly)
         {
             var cachedDelegatePath = Path.Combine(Path.GetDirectoryName(assemblyLocation), "_" + Path.GetFileName(assemblyLocation) + ".entrypoint");
@@ -345,6 +370,8 @@ namespace OpenWrap
                 throw new FileNotFoundException("The console executable is not on a local file system.");
 
             var linkContent = Encoding.UTF8.GetBytes(path.FullName);
+            if (Directory.Exists(_systemRootPath) == false)
+                Directory.CreateDirectory(_systemRootPath);
             using (var file = File.Create(Path.Combine(_systemRootPath, _currentExecutable.Name + ".link")))
                 file.Write(linkContent, 0, linkContent.Length);
             AddOpenWrapSystemPathToEnvironment(path.Directory.FullName);
@@ -381,7 +408,7 @@ namespace OpenWrap
 @"<?xml version =""1.0""?>
 <configuration>
     <startup useLegacyV2RuntimeActivationPolicy=""true"">
-    <supportedRuntime version=""v2.0""/>
+    <supportedRuntime version=""v2.0.50727""/>
     <supportedRuntime version=""v4.0""/>
     </startup>
 </configuration>";

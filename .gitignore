@@ -19,3 +19,7 @@ Thumbs.db
 *.cache
 .svn
 *.pidb
+*.bin
+*/*.bin
+*.orig
+*/*.orig

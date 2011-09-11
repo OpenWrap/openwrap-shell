@@ -21,7 +21,10 @@ namespace OpenWrap.Preloading
         public static IEnumerable<string> GetPackageFolders(RemoteInstall remote, string currentDirectory, string systemRepositoryPath, params string[] packageNamesToLoad)
         {
             var regex = new Regex(string.Format(@"^(?<name>{0})-(?<version>\d+(\.\d+(\.\d+(\.\d+)?)?)?)$", string.Join("|", packageNamesToLoad.ToArray())), RegexOptions.IgnoreCase);
-            EnsurePackagesUnzippedInRepository(Environment.CurrentDirectory);
+
+            currentDirectory = currentDirectory ?? Environment.CurrentDirectory;
+
+            EnsurePackagesUnzippedInRepository(currentDirectory);
 
             var bootstrapPackagePaths = currentDirectory != null
                 ? GetLatestPackagesForProjectRepository(packageNamesToLoad, currentDirectory) 
@@ -172,8 +175,8 @@ namespace OpenWrap.Preloading
                            let wrapDescriptor = packageDirectory.GetFiles("*.wrapdesc").OrderBy(x => x.Name.Length).FirstOrDefault()
                            where wrapDescriptor != null
                            let content = File.ReadAllText(wrapDescriptor.FullName)
-                           let nameMatch = Regex.Match(content, @"name\s*:\s*(?<name>\S+)", RegexOptions.Multiline)
-                           let versionMatch = Regex.Match(content, @"version\s*:\s*(?<version>[\d\.]+)", RegexOptions.Multiline)
+                           let nameMatch = Regex.Match(content, @"name\s*:\s*(?<name>\S+)", RegexOptions.Multiline | RegexOptions.IgnoreCase)
+                           let versionMatch = Regex.Match(content, @"version\s*:\s*(?<version>[\d\.]+)", RegexOptions.Multiline | RegexOptions.IgnoreCase)
                            where nameMatch.Success
                            let version = versionMatch.Success ? TryGetVersion(versionMatch.Groups["version"].Value) : new Version(0,0)
                            select new foundPackage
@@ -313,10 +316,10 @@ namespace OpenWrap.Preloading
         }
         static void AddPackageAndDependents(XDocument document, string currentPackage, List<string> packageNames)
         {
-            if (!packageNames.Contains(currentPackage)) packageNames.Add(currentPackage);
+            if (!packageNames.Contains(currentPackage, StringComparer.OrdinalIgnoreCase)) packageNames.Add(currentPackage);
             foreach (var dependent in GetDependents(document, currentPackage))
             {
-                if (packageNames.Contains(dependent) == false)
+                if (packageNames.Contains(dependent, StringComparer.OrdinalIgnoreCase) == false)
                 {
                     packageNames.Add(dependent);
                     AddPackageAndDependents(document, dependent, packageNames);
