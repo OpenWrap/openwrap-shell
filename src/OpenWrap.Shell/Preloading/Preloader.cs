@@ -268,7 +268,7 @@ namespace OpenWrap.Preloading
                                                versionAttribute != null &&
                                                packageSource != null &&
                                                packageNamesToDownload.Contains(nameAttribute.Value, StringComparer.OrdinalIgnoreCase)
-                                         group new { Name = nameAttribute.Value, Version = versionAttribute.Value, Href = packageSource } by nameAttribute.Value
+                                         group new { Name = nameAttribute.Value, Version = versionAttribute.Value, Href = packageSource } by nameAttribute.Value.ToLowerInvariant()
                                              into byNameGroup
                                              select byNameGroup.OrderByDescending(x => x.Version)
                                                      .Select(x => new { x.Name, Href = new Uri(x.Href, UriKind.RelativeOrAbsolute) })

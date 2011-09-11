@@ -29,9 +29,19 @@ namespace OpenWrap
             Console.WriteLine("(i) install the shell and make it available on the path?");
             Console.WriteLine("(c) use the current executable location and make it available on the path?");
             Console.WriteLine("(n) do nothing?");
-            var key = Console.ReadKey();
+
+            char key;
+            try
+            {
+                key = Console.ReadKey().KeyChar;
+            }
+            catch (InvalidOperationException)
+            {
+                var input = Console.ReadLine();
+                key = string.IsNullOrEmpty(input) ? '\0' : input[0];
+            }
             Console.WriteLine();
-            switch (key.KeyChar)
+            switch (key)
             {
                 case 'i':
                 case 'I':
