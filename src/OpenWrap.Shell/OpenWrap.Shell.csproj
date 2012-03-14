@@ -49,24 +49,85 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="..\..\preloader\src\OpenWrap.Preloading\PackageManagement\PackageMissingException.cs">
+      <Link>PackageManagement\PackageMissingException.cs</Link>
+    </Compile>
+    <Compile Include="..\..\preloader\src\OpenWrap.Preloading\PackageManagement\PackageResolverVisitor.cs">
+      <Link>PackageManagement\PackageResolverVisitor.cs</Link>
+    </Compile>
+    <Compile Include="..\..\preloader\src\OpenWrap.Preloading\PackageModel\AbsolutelyEqualVersionVertex.cs">
+      <Link>PackageModel\AbsolutelyEqualVersionVertex.cs</Link>
+    </Compile>
+    <Compile Include="..\..\preloader\src\OpenWrap.Preloading\PackageModel\AnyVersionVertex.cs">
+      <Link>PackageModel\AnyVersionVertex.cs</Link>
+    </Compile>
+    <Compile Include="..\..\preloader\src\OpenWrap.Preloading\PackageModel\EqualVersionVertex.cs">
+      <Link>PackageModel\EqualVersionVertex.cs</Link>
+    </Compile>
+    <Compile Include="..\..\preloader\src\OpenWrap.Preloading\PackageModel\GreaterThanOrEqualVersionVertex.cs">
+      <Link>PackageModel\GreaterThanOrEqualVersionVertex.cs</Link>
+    </Compile>
+    <Compile Include="..\..\preloader\src\OpenWrap.Preloading\PackageModel\GreaterThanVersionVertex.cs">
+      <Link>PackageModel\GreaterThanVersionVertex.cs</Link>
+    </Compile>
+    <Compile Include="..\..\preloader\src\OpenWrap.Preloading\PackageModel\LessThanOrEqualVersionVertex.cs">
+      <Link>PackageModel\LessThanOrEqualVersionVertex.cs</Link>
+    </Compile>
+    <Compile Include="..\..\preloader\src\OpenWrap.Preloading\PackageModel\LessThanVersionVertex.cs">
+      <Link>PackageModel\LessThanVersionVertex.cs</Link>
+    </Compile>
+    <Compile Include="..\..\preloader\src\OpenWrap.Preloading\PackageModel\Parsers\DependsVersionParser.cs">
+      <Link>PackageModel\Parsers\DependsVersionParser.cs</Link>
+    </Compile>
+    <Compile Include="..\..\preloader\src\OpenWrap.Preloading\PackageModel\PessimisticGreaterVersionVertex.cs">
+      <Link>PackageModel\PessimisticGreaterVersionVertex.cs</Link>
+    </Compile>
+    <Compile Include="..\..\preloader\src\OpenWrap.Preloading\PackageModel\VersionVertex.cs">
+      <Link>PackageModel\VersionVertex.cs</Link>
+    </Compile>
+    <Compile Include="..\..\preloader\src\OpenWrap.Preloading\Preloading\INotifyDownload.cs">
+      <Link>Preloading\INotifyDownload.cs</Link>
+    </Compile>
+    <Compile Include="..\..\preloader\src\OpenWrap.Preloading\Preloading\NotifyProgressWebClient.cs">
+      <Link>Preloading\NotifyProgressWebClient.cs</Link>
+    </Compile>
+    <Compile Include="..\..\preloader\src\OpenWrap.Preloading\Preloading\Preloader.cs">
+      <Link>Preloading\Preloader.cs</Link>
+    </Compile>
+    <Compile Include="..\..\preloader\src\OpenWrap.Preloading\Preloading\TinySharpZip\ZipArchive.cs">
+      <Link>Preloading\TinySharpZip\ZipArchive.cs</Link>
+    </Compile>
+    <Compile Include="..\..\preloader\src\OpenWrap.Preloading\Preloading\TinySharpZip\ZipDirectoryEntry.cs">
+      <Link>Preloading\TinySharpZip\ZipDirectoryEntry.cs</Link>
+    </Compile>
+    <Compile Include="..\..\preloader\src\OpenWrap.Preloading\Preloading\TinySharpZip\ZipEntry.cs">
+      <Link>Preloading\TinySharpZip\ZipEntry.cs</Link>
+    </Compile>
+    <Compile Include="..\..\preloader\src\OpenWrap.Preloading\Preloading\TinySharpZip\ZipFileEntry.cs">
+      <Link>Preloading\TinySharpZip\ZipFileEntry.cs</Link>
+    </Compile>
+    <Compile Include="..\..\preloader\src\OpenWrap.Preloading\SemanticVersion.cs">
+      <Link>SemanticVersion.cs</Link>
+    </Compile>
     <Compile Include="BootstrapResult.cs" />
     <Compile Include="BootstrapRunner.cs" />
     <Compile Include="ConsoleNotifier.cs" />
     <Compile Include="INotifier.cs" />
     <Compile Include="InstallAction.cs" />
-    <Compile Include="Preloading\INotifyDownload.cs" />
-    <Compile Include="Preloading\NotifyProgressWebClient.cs" />
-    <Compile Include="Preloading\Preloader.cs" />
     <Compile Include="Program.cs">
     </Compile>
     <Compile Include="Properties\AssemblyInfo.cs" />
-    <Compile Include="Preloading\TinySharpZip\ZipArchive.cs" />
-    <Compile Include="Preloading\TinySharpZip\ZipDirectoryEntry.cs" />
-    <Compile Include="Preloading\TinySharpZip\ZipEntry.cs" />
-    <Compile Include="Preloading\TinySharpZip\ZipFileEntry.cs" />
+  </ItemGroup>
+  <ItemGroup>
+    <Folder Include="t\" />
   </ItemGroup>
   <Import Project="..\..\build\common.project.properties" />
   <Import Project="..\..\wraps\openwrap\build\OpenWrap.CSharp.targets" />
+  <ProjectExtensions>
+    <VisualStudio>
+      <UserProperties ProjectLinkReference="4e23a829-b9ef-4bde-941a-d15b334c09ad" ProjectLinkerExcludeFilter="\\?desktop(\\.*)?$;\\?silverlight(\\.*)?$;\.desktop;\.silverlight;\.xaml;^service references(\\.*)?$;\.clientconfig;^web references(\\.*)?$" />
+    </VisualStudio>
+  </ProjectExtensions>
   <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 
        Other similar extension points exist, see Microsoft.Common.targets.
   <Target Name="BeforeBuild">
