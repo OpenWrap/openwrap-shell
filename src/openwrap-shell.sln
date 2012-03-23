@@ -9,6 +9,11 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "External", "External", "{8A
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "OpenWrap.Preloading", "..\preloader\src\OpenWrap.Preloading\OpenWrap.Preloading.csproj", "{4E23A829-B9EF-4BDE-941A-D15B334C09AD}"
 EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "OpenWrap", "OpenWrap", "{EBB11A8D-C349-42DD-A390-A7CF98CCE126}"
+	ProjectSection(SolutionItems) = preProject
+		..\openwrap-shell.wrapdesc = ..\openwrap-shell.wrapdesc
+	EndProjectSection
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU

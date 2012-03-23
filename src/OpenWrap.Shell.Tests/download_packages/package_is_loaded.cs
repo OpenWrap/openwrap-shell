@@ -26,7 +26,7 @@ namespace Tests.download_packages
         [Test]
         public void directory_is_returned()
         {
-            Directories.ShouldContain(Path.Combine(SystemRepositoryPath, "_cache", "one-ring-1.0"));
+            should_have_dir(SystemRepositoryPath, "wraps", "_cache", "one-ring-1.0");
         }
 
         [Test]

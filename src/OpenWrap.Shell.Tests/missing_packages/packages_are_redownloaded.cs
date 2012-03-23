@@ -27,7 +27,7 @@ namespace Tests.missing_packages
         [Test]
         public void dependnecy_directory_is_found()
         {
-            Directories.ShouldContain(package_dir("sauron-1.0").FullName);
+            should_have_dir(package_dir("sauron-1.0").FullName);
         }
     }
 }

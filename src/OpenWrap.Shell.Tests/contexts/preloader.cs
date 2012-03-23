@@ -5,6 +5,7 @@ using System.Linq;
 using System.Linq.Expressions;
 using System.Xml.Linq;
 using NUnit.Framework;
+using OpenWrap;
 using OpenWrap.Preloading;
 using Tests;
 
@@ -36,7 +37,7 @@ namespace Tests.contexts
             if (Directory.Exists(assemblyDirectory) == false)
                 Directory.CreateDirectory(assemblyDirectory);
             using (var descriptor = new StreamWriter(Path.Combine(destinationPath, package.name + ".wrapdesc")))
-                descriptor.Write("name: {0}\r\nversion: {1}\r\n{2}", package.name, package.version, package.content);
+                descriptor.Write("name: {0}\r\nsemantic-version: {1}\r\nversion: {1}\r\n{2}", package.name, package.version, package.content);
             using (var assembly = File.OpenWrite(assemblyPath))
                 package.assemblyStream.CopyTo(assembly);
         }
@@ -47,7 +48,7 @@ namespace Tests.contexts
             Packages[name + "-" + version] = new package
             {
                     name = name,
-                    version = new Version(version),
+                    version = SemanticVersion.TryParseExact(version),
                     content = string.Join("\r\n", dependencies.Select(x=>"depends: " + x).ToArray()),
                     assemblyPath = assemblyPath,
                     assemblyStream = AssemblyBuilder.CreateAssemblyStream(Path.GetFileName(assemblyPath), types)
@@ -58,6 +59,7 @@ namespace Tests.contexts
             indexFile.Root.Add(new XElement("wrap", 
                 new XAttribute("name", name),
                 new XAttribute("version", version),
+                new XAttribute("semantic-version", version),
                 new XElement("link",
                     new XAttribute("rel", "package"),
                     new XAttribute("href", packageFileName)
@@ -79,7 +81,7 @@ namespace Tests.contexts
                 AssemblyBuilder.CreateAssembly(assembly, Path.GetFileName(assemblyPath));
 
             using (var descriptor = new StreamWriter(Path.Combine(cacheDirForPackage, name + ".wrapdesc")))
-                descriptor.Write("name: {0}\r\nversion: {1}\r\n{2}", name, version, string.Join("\r\n:", dependencies.Select(x=>"depends: " + x).ToArray()));
+                descriptor.Write("name: {0}\r\nsemantic-version: {1}\r\nversion: {1}\r\n{2}", name, version, string.Join("\r\n:", dependencies.Select(x => "depends: " + x).ToArray()));
         }
 
         protected void when_getting_package_folders(params string[] packages)
@@ -106,7 +108,7 @@ namespace Tests.contexts
         protected class package
         {
             public string name;
-            public Version version;
+            public SemanticVersion version;
             public string assemblyPath;
             public Stream assemblyStream;
             public string content;
@@ -125,12 +127,17 @@ namespace Tests.contexts
 
         protected DirectoryInfo package_dir(string packageName)
         {
-            return new DirectoryInfo(Path.Combine(SystemRepositoryPath, "_cache", packageName));
+            return new DirectoryInfo(Path.Combine(SystemRepositoryPath, "wraps", "_cache", packageName));
         }
 
         protected FileInfo package_file(string packageName, string path)
         {
-            return new FileInfo(Path.Combine(SystemRepositoryPath, "_cache", packageName, path));
+            return new FileInfo(Path.Combine(SystemRepositoryPath, "wraps", "_cache", packageName, path));
+        }
+
+        protected void should_have_dir(params string[] path)
+        {
+            Directories.ShouldContain(Path.Combine(path) + Path.DirectorySeparatorChar);
         }
     }
     public class NullNotifier : INotifyDownload

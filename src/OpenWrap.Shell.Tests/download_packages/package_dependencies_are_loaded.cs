@@ -26,7 +26,7 @@ namespace Tests.download_packages
         [Test]
         public void dependency_directory_is_returned()
         {
-            Directories.ShouldContain(Path.Combine(SystemRepositoryPath, "_cache", "sauron-1.0"));
+            should_have_dir(SystemRepositoryPath, "wraps", "_cache", "sauron-1.0");
         }
 
         [Test]

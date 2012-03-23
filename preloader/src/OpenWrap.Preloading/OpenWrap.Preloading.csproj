@@ -61,9 +61,7 @@
     <Compile Include="Preloading\TinySharpZip\ZipEntry.cs" />
     <Compile Include="Preloading\TinySharpZip\ZipFileEntry.cs" />
   </ItemGroup>
-  <ItemGroup>
-    <Folder Include="t\" />
-  </ItemGroup>
+  <ItemGroup />
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSHARP.Targets" />
   <ProjectExtensions>
     <VisualStudio AllowExistingFolder="true" />

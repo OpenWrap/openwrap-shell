@@ -112,7 +112,7 @@ namespace OpenWrap
                     TryRemoveWrapFiles(_packageNamesToLoad, systemWrapFiles);
                 var bootstrapPackages = Preloader.GetPackageFolders(Preloader.RemoteInstall.FromServer(_bootstrapAddress, _notifier, _proxy, _proxyUsername, _proxyPassword),
                                                                     _useSystem ? null : Environment.CurrentDirectory,
-                                                                    systemWrapFiles,
+                                                                    _systemRootPath,
                                                                     _packageNamesToLoad.ToArray());
 
                 if (bootstrapPackages.Count() == 0)
