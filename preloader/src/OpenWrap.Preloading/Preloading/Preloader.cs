@@ -194,6 +194,8 @@ namespace OpenWrap.Preloading
 
         static IEnumerable<string> GetLatestPackagesForSystemRepository(DirectoryInfo systemRepository, IEnumerable<string> packageNames)
         {
+            systemRepository = GetRepositoryDirectoryFromProjectDirectory(systemRepository);
+
             EnsurePackagesUnzippedInRepository(systemRepository);
             return ResolvePackages(GetCacheDirectoryFromRepositoryDirectory(systemRepository), packageNames);
         }
