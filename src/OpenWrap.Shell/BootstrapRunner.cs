@@ -443,8 +443,8 @@ namespace OpenWrap
 
         void TryUpgrade(string consolePath)
         {
-            var existingVersion = new Version(FileVersionInfo.GetVersionInfo(consolePath).FileVersion);
-            var currentVersion = new Version(FileVersionInfo.GetVersionInfo(_currentExecutable.FullName).FileVersion);
+            var existingVersion = SemanticVersion.TryParseExact(FileVersionInfo.GetVersionInfo(consolePath).FileVersion);
+            var currentVersion = SemanticVersion.TryParseExact(FileVersionInfo.GetVersionInfo(_currentExecutable.FullName).FileVersion);
 
             if (currentVersion > existingVersion)
             {
