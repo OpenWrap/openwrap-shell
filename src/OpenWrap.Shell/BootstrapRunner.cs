@@ -159,16 +159,24 @@ namespace OpenWrap
 
         void NotifyVersion(Assembly assembly)
         {
-            Version fileVersion = null;
+            SemanticVersion fileVersion = null;
             try
             {
                 var version = FileVersionInfo.GetVersionInfo(assembly.Location);
-                fileVersion = new Version(version.FileVersion);
+                fileVersion = SemanticVersion.TryParseExact(version.FileVersion);
             }
             catch
             {
             }
-            _notifier.BootstraperIs(assembly.Location, fileVersion ?? assembly.GetName().Version);
+            if (fileVersion == null)
+            {
+                var attrib = Attribute.GetCustomAttribute(assembly, typeof(AssemblyInformationalVersionAttribute));
+                if (attrib != null)
+                    fileVersion = SemanticVersion.TryParseExact(((AssemblyInformationalVersionAttribute)attrib).InformationalVersion);
+            }
+            if (fileVersion == null)
+                fileVersion = SemanticVersion.TryParseExact(assembly.GetName().Version.ToString());
+            _notifier.BootstraperIs(assembly.Location, fileVersion);
         }
         BootstrapResult ExecuteEntrypoint(string[] args, KeyValuePair<Type, Func<string[], int>> entryPoint)
         {
