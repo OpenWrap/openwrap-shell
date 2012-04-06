@@ -44,14 +44,14 @@ namespace OpenWrap
         public BootstrapResult Run(string[] args)
         {
             var consumedArgs = new List<string>();
-            if (args.Contains("-debug", StringComparer.OrdinalIgnoreCase))
+            if (args.Contains("-ShellDebug", StringComparer.OrdinalIgnoreCase))
             {
                 // mono doesn't support attaching a debugger
                 if (Type.GetType("Mono.Runtime") == null && !Debugger.IsAttached)
                     Debugger.Launch();
-                consumedArgs.Add("debug");
+                consumedArgs.Add("ShellDebug");
                 _debug = true;
-                args = args.Where(x => x.IndexOf("-debug", StringComparison.OrdinalIgnoreCase) == -1).ToArray();
+                args = args.Where(x => x.IndexOf("-ShellDebug", StringComparison.OrdinalIgnoreCase) == -1).ToArray();
             }
             args = ProcessArgumentWithValue(args, "-InstallHref", x =>
             {
