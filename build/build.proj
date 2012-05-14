@@ -8,23 +8,9 @@
 
     <!-- Initializes the environment and remote repositories -->
     
-    <InitializeOpenWrap CurrentDirectory="$(MSBuildProjectDirectory)\..">
+    <InitializeOpenWrap CurrentDirectory="$(MSBuildProjectDirectory)\..\" CurrentProjectFile="$(MSBuildProjectFullPath)">
       <Output TaskParameter="Name" PropertyName="OpenWrap-PackageName" />
     </InitializeOpenWrap>
-
-    <PropertyGroup>
-      <RemoteRepository>
-        <Name>cs</Name>
-        <Href>file://glon12d10131/modules/</Href>
-      </RemoteRepository>
-    </PropertyGroup>
-
-    <RunCommand
-      Verb="add"
-      Noun="remote"
-      Args="$(RemoteRepository)"
-      ContinueOnError="true"
-      />
 
   </Target>
   <Target Name="Build" DependsOnTargets="_Initialize">
@@ -47,7 +33,7 @@
     <PropertyGroup>
       <PublishArguments>
         <Name>$(OpenWrap-PackageName)</Name>
-        <RemoteRepository>cs</RemoteRepository>
+        <RemoteRepository>file://galaxy.caffeine-it.net/packages</RemoteRepository>
       </PublishArguments>
     </PropertyGroup>
 
