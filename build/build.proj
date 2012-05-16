@@ -13,6 +13,14 @@
     </InitializeOpenWrap>
 
   </Target>
+  
+  
+  <PropertyGroup>
+    <BuildArgs Condition="'$(BUILD_NUMBER)' != ''">
+      <BuildCounter>%BUILD_NUMBER%</BuildCounter>
+    </BuildArgs>
+  </PropertyGroup>
+  
   <Target Name="Build" DependsOnTargets="_Initialize">
 
 
@@ -20,9 +28,14 @@
 
     <RunCommand
       Verb="build"
-      Noun="wrap" />
+      Noun="wrap"
+      Args="$(BuildArgs)"
+      Capture="PackageBuilt.Version">
+      <Output TaskParameter="Captures" ItemName="Captured" />
+    </RunCommand>
     
     
+    <Message Importance="High" Text="##teamcity[buildNumber '@(Captured)']" Condition="'$(BUILD_NUMBER)' != '' and '%(Property)' == 'PackageBuilt.Version'" />
   </Target>
 
   <Target Name="Publish" DependsOnTargets="Build">

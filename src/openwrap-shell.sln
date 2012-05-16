@@ -39,4 +39,7 @@ Global
 	GlobalSection(NestedProjects) = preSolution
 		{4E23A829-B9EF-4BDE-941A-D15B334C09AD} = {8A9BAD1E-318A-4AA1-BDD7-7BF03B5C9174}
 	EndGlobalSection
+	GlobalSection(ExtensibilityAddIns) = postSolution
+		OpenWrap.VisualStudioIntegration2010 = 1;Ensures OpenWrap initialization when a solution is opened.;OpenWrap Visual Studio Solution Add-in
+	EndGlobalSection
 EndGlobal
