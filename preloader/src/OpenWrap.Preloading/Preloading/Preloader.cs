@@ -49,6 +49,7 @@ namespace OpenWrap.Preloading
                 try
                 {
                     bootstrapPackagePaths = GetLatestPackagesForSystemRepository(GetRepositoryDirectoryFromProjectDirectory(systemDirectory), packageNamesToLoad);
+                    fileNotFound.Clear();
                 }
                 catch (PackageMissingException e)
                 {

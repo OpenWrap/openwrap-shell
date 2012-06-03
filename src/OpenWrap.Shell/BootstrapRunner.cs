@@ -6,7 +6,6 @@ using System.Linq;
 using System.Linq.Expressions;
 using System.Reflection;
 using System.Runtime.Serialization;
-using System.Runtime.Serialization.Formatters.Binary;
 using System.Text;
 using OpenWrap.Preloading;
 
@@ -60,8 +59,13 @@ namespace OpenWrap
             });
             args = ProcessArgumentWithValue(args, "-SystemRepositoryPath", x =>
             {
+                throw new NotSupportedException("Setting the location to wrap files is not supported. Please use -SystemPath instead.");
+            });
+            args = ProcessArgumentWithValue(args, "-SystemPath", x =>
+            {
                 _systemRootPath = x;
-                consumedArgs.Add("SystemRepositoryPath");
+                _sysPathOverride = true;
+                consumedArgs.Add("SystemPath");
             });
             ProcessArgumentWithValue(args, "-ProxyUsername", x =>
             {
@@ -110,6 +114,7 @@ namespace OpenWrap
                 var systemWrapFiles = Path.Combine(_systemRootPath, "wraps");
                 if (_shellPanic)
                     TryRemoveWrapFiles(_packageNamesToLoad, systemWrapFiles);
+
                 var bootstrapPackages = Preloader.GetPackageFolders(Preloader.RemoteInstall.FromServer(_bootstrapAddress, _notifier, _proxy, _proxyUsername, _proxyPassword),
                                                                     _useSystem ? null : Environment.CurrentDirectory,
                                                                     _systemRootPath,
@@ -187,14 +192,27 @@ namespace OpenWrap
         {
             var info = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase)
             {
-                    { "openwrap.syspath", _systemRootPath },
                     { "openwrap.cd", Environment.CurrentDirectory },
                     { "openwrap.shell.commandline", GetCommandLine() },
                     { "openwrap.shell.assemblies", assemblies.Select(x=>x.Location).ToList() },
                     { "openwrap.shell.version", _shellVersion},
                     { "openwrap.shell.args", consumedArgs.ToList() }
             };
+            if (_sysPathOverride)
+            {
+                info["openwrap.syspath"] = Path.Combine(_systemRootPath, "wraps");
+                info["openwrap.sysroot"] = _systemRootPath;
+            }
+            OverrideSysPathForBuggyOpenWrapVersion(info, entryPoint);
             return (BootstrapResult)entryPoint.Value(info);
+        }
+
+        void OverrideSysPathForBuggyOpenWrapVersion(Dictionary<string, object> info, KeyValuePair<Type, Func<IDictionary<string, object>, int>> entryPoint)
+        {
+            if (entryPoint.Key.Assembly.CodeBase.Contains("openwrap-2.0.2"))
+            {
+                info["openwrap.syspath"] = _systemRootPath;
+            }
         }
 
         string GetCommandLine()
@@ -234,21 +252,19 @@ namespace OpenWrap
             _notifier.Message("Added '{0}' to PATH.", openWrapRootPath);
         }
 
-        BinaryFormatter _delegateSerializer = new BinaryFormatter();
         bool _debug;
+        bool _sysPathOverride;
+
 
         KeyValuePair<Type,Func<IDictionary<string, object>, int>>? LoadEntrypointCache(string assemblyLocation, Assembly assembly)
         {
             var cachedDelegatePath = Path.Combine(Path.GetDirectoryName(assemblyLocation), "_" + Path.GetFileName(assemblyLocation) + ".entrypoint");
-            bool discard = false;
             if (File.Exists(cachedDelegatePath))
             {
                 using (var stream = File.OpenRead(cachedDelegatePath))
                 {
                     byte[] header = new byte[2];
-                    if (stream.Read(header, 0, 2) != 2 || header[0] != CACHE_VERSION) 
-                        discard = true;
-                    else
+                    if (stream.Read(header, 0, 2) == 2 && header[0] == CACHE_VERSION)
                     {
                         if (header[1] == 0) return default(KeyValuePair<Type, Func<IDictionary<string, object>, int>>);
                         try
@@ -261,7 +277,7 @@ namespace OpenWrap
                                 var methodName = methodDetails.Substring(methodDetails.IndexOf("::") + 2);
                                 var type = assembly.GetType(typeName);
                                 var method = type.GetMethod(methodName, new[] { typeof(IDictionary<string, object>) });
-                                return new KeyValuePair<Type, Func<IDictionary<string, object>, int>>(type, env=>(int)method.Invoke(null,new object[]{env}));
+                                return new KeyValuePair<Type, Func<IDictionary<string, object>, int>>(type, env => (int)method.Invoke(null, new object[] { env }));
                             }
                         }
                         catch
@@ -335,12 +351,15 @@ namespace OpenWrap
             if (mainMethod != null)
             {
                 var setSysPathMethod = mainMethod.DeclaringType.GetMethod("SetSystemRepositoryPath", BindingFlags.Public | BindingFlags.Static, null, new[] { typeof(string) }, null);
-
+                if (setSysPathMethod == null && _sysPathOverride)
+                {
+                    throw new NotSupportedException("The shell cannot start this version of OpenWrap from a redirected installation path (the -SystemPath parameter). Upgrade to a newer version or remove the offending parameter.");
+                }
                 Func<string[], int> value = args => (int)mainMethod.Invoke(null, new object[] { args });
                 if (setSysPathMethod != null)
                     value = args =>
                     {
-                        setSysPathMethod.Invoke(null, new object[] { _systemRootPath });
+                        setSysPathMethod.Invoke(null, new object[] { Path.Combine(_systemRootPath, "wraps") });
                         return value(args);
                     };
                 return new KeyValuePair<Type, Func<string[], int>>(

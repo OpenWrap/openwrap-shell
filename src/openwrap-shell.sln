@@ -12,6 +12,7 @@ EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "OpenWrap", "OpenWrap", "{EBB11A8D-C349-42DD-A390-A7CF98CCE126}"
 	ProjectSection(SolutionItems) = preProject
 		..\openwrap-shell.wrapdesc = ..\openwrap-shell.wrapdesc
+		..\version = ..\version
 	EndProjectSection
 EndProject
 Global
