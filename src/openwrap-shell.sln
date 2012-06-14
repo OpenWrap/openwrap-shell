@@ -3,7 +3,7 @@ Microsoft Visual Studio Solution File, Format Version 11.00
 # Visual Studio 2010
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "OpenWrap.Shell", "OpenWrap.Shell\OpenWrap.Shell.csproj", "{49E96F6C-C545-4826-BC35-666C76721B9D}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Tests", "OpenWrap.Shell.Tests\Tests.csproj", "{E51E2A2E-7405-4112-B964-AFCBE691B5E7}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Tests", "Tests\Tests.csproj", "{E51E2A2E-7405-4112-B964-AFCBE691B5E7}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "External", "External", "{8A9BAD1E-318A-4AA1-BDD7-7BF03B5C9174}"
 EndProject

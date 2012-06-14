@@ -1,7 +1,11 @@
-﻿depends: openwrap content
-name: openwrap-shell
+﻿name: openwrap-shell
+title: OpenWrap Shell
+depends: openwrap content
 depends: nunit
 depends: mono.cecil
+trademark: OpenWrap is a registered trademark of CaffeineIT / naughtyProd limited
+copyright: © 2010-2012 naughtyProd limited
+author: Sebastien Lambla <seb@serialseb.com>
 assembly-info: author
 assembly-info: copyright
 assembly-info: assembly-version
